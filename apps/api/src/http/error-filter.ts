@@ -1,6 +1,6 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException } from "@nestjs/common";
 import type { Response } from "express";
-import { AuthChallenge, RateLimited } from "./errors.js";
+import { AuthChallenge, RateLimited, StepUpRequired } from "./errors.js";
 import type { JsonLogger } from "./logger.js";
 import type { AppRequest } from "./request.js";
 
@@ -30,10 +30,18 @@ export class ErrorFilter implements ExceptionFilter {
 
     let status = 500;
     let message: string | string[] | undefined;
+    let code: string | undefined;
 
     if (err instanceof AuthChallenge) {
       status = 401;
       res.setHeader("WWW-Authenticate", `Bearer realm="${REALM}"${err.presented ? ', error="invalid_token"' : ""}`);
+    } else if (err instanceof StepUpRequired) {
+      status = 403;
+      code = "STEP_UP_REQUIRED";
+      res.setHeader(
+        "WWW-Authenticate",
+        `Bearer realm="${REALM}", error="insufficient_user_authentication", error_description="A stronger authentication is required", acr_values="${err.acrValues}"`,
+      );
     } else if (err instanceof RateLimited) {
       status = 429;
       res.setHeader("Retry-After", String(err.retryAfterSeconds));
@@ -56,6 +64,6 @@ export class ErrorFilter implements ExceptionFilter {
       this.logger.event("error", "unhandled", { reqId: req?.id, errorClass: err instanceof Error ? err.name : typeof err });
     }
 
-    res.status(status).json({ statusCode: status, error: TEXT[status] ?? "Error", ...(message ? { message } : {}) });
+    res.status(status).json({ statusCode: status, error: TEXT[status] ?? "Error", ...(message ? { message } : {}), ...(code ? { code } : {}) });
   }
 }

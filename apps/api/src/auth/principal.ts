@@ -1,10 +1,8 @@
 // Strict mapping from verified token claims to a typed Principal.
 // Anything missing, mistyped or outside the known vocabulary fails closed: no partial principal exists.
-export const CLEARANCES = ["OFFICIAL", "CONFIDENTIAL", "SECRET"] as const;
-export type Clearance = (typeof CLEARANCES)[number];
+import { CLEARANCES, ROLES, type Clearance, type Role } from "@acl/policy";
 
-export const ROLES = ["analyst", "reviewer", "unit-admin", "auditor", "platform-admin"] as const;
-export type Role = (typeof ROLES)[number];
+export { CLEARANCES, ROLES, type Clearance, type Role };
 
 export interface Principal {
   readonly sub: string;

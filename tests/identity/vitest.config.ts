@@ -1,5 +1,7 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: { alias: { "@acl/policy": fileURLToPath(new URL("../../packages/policy/src/index.ts", import.meta.url)) } },
   test: { include: ["src/**/*.test.ts"], testTimeout: 90_000, fileParallelism: false },
 });
