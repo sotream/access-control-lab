@@ -1,9 +1,10 @@
-import { Controller, Get, type Type } from "@nestjs/common";
+import { Controller, Get, RequestMethod, type Type } from "@nestjs/common";
 import { PATH_METADATA, METHOD_METADATA } from "@nestjs/common/constants";
 import { ModulesContainer, Reflector } from "@nestjs/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { JwksServer, bearer, boot, get, goodClaims, makeKey, sign, type Booted, type TestKey } from "../test/harness.js";
-import { ACCESS_KEY, type Access } from "./auth/access.js";
+import { FIXTURE } from "../test/casefile-fixture.js";
+import { ACCESS_KEY, type Access, Policy } from "./auth/access.js";
 
 // A route someone "forgot" to declare access on. The suite must see it and the guard must deny it.
 @Controller("forgotten")
@@ -98,5 +99,24 @@ describe("default deny and route inventory (T-11)", () => {
     expect(r.status).toBe(404);
     expect(r.body).toEqual({ statusCode: 404, error: "Not Found" });
     await a.close();
+  });
+
+  it("fixture routes with @Policy are all declared; each answers 401 without a token", async () => {
+    const a = await boot(jwks.url, {}, FIXTURE.controllers, { providers: FIXTURE.providers });
+    const routes = enumerate(a.app).filter((r) => r.access?.kind === "policy");
+    expect(routes.length).toBeGreaterThanOrEqual(9);
+    expect(enumerate(a.app).filter((r) => !r.access)).toEqual([]);
+    for (const r of routes) {
+      const res = await fetch(`${a.url}${r.path.replace(":id", "x")}`, { method: RequestMethod[r.method] });
+      expect(res.status, `${RequestMethod[r.method]} ${r.path}`).toBe(401);
+    }
+    await a.close();
+  });
+
+  it("@Policy refuses a role-only declaration for actions that touch a case file", () => {
+    for (const action of ["create", "update", "submit", "approve", "delete", "export"] as const) {
+      expect(() => Policy({ action, resource: null }), action).toThrow(/ResourceLoader/);
+    }
+    for (const action of ["read", "readAudit", "manageUsers"] as const) expect(() => Policy({ action, resource: null })).not.toThrow();
   });
 });
