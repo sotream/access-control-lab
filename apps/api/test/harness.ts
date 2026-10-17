@@ -1,7 +1,7 @@
 // Test fixtures: locally generated keys, a fake JWKS endpoint that counts fetches, token signing, and a booted app.
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Type } from "@nestjs/common";
+import type { Provider, Type } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
   exportJWK,
@@ -108,6 +108,7 @@ export async function boot(
   jwksUri: string,
   env: Record<string, string> = {},
   extraControllers: Type[] = [],
+  extra: { providers?: Provider[]; clock?: () => number } = {},
 ): Promise<Booted> {
   const cfg = loadConfig({
     KEYCLOAK_ISSUER: ISSUER,
@@ -119,7 +120,7 @@ export async function boot(
     ...env,
   });
   const logs: string[] = [];
-  const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), extraControllers });
+  const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), extraControllers, extraProviders: extra.providers, clock: extra.clock });
   await app.listen(0, "127.0.0.1");
   const url = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   return { app, url, cfg, logs, close: () => app.close() };

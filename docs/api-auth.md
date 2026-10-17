@@ -52,7 +52,7 @@ application roles (default roles are dropped). Absent `compartments` means none;
 
 ## Default deny (`auth/access.ts`, `auth/auth.guard.ts`)
 
-Each route must declare `@Public()` or `@Authenticated()` (stage 4 adds policy decorators). An undeclared route returns 401 without a
+Each route must declare `@Public()`, `@Authenticated()` or `@Policy(...)` (see `docs/policy.md`). An undeclared route returns 401 without a
 token and 403 with one, and `routes.test.ts` fails the build if any production route lacks metadata. Only `GET /health` may be public (pinned by a test).
 
 ## Errors, logging

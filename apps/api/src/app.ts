@@ -1,4 +1,4 @@
-import { type Type, ValidationPipe } from "@nestjs/common";
+import { type Provider, type Type, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import helmet from "helmet";
@@ -6,12 +6,13 @@ import { AppModule } from "./app.module.js";
 import type { AppConfig } from "./config.js";
 import { ErrorFilter } from "./http/error-filter.js";
 import { JsonLogger } from "./http/logger.js";
+import type { Clock } from "./policy/policy.enforcer.js";
 import { requestContext } from "./http/request-context.js";
 
 /** The one place the HTTP hardening is applied, so tests exercise exactly what production runs. */
-export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; extraControllers?: Type[] } = {}) {
+export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; extraControllers?: Type[]; extraProviders?: Provider[]; clock?: Clock } = {}) {
   const logger = opts.logger ?? new JsonLogger();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule.register(cfg, opts.extraControllers), {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule.register(cfg, { logger, clock: opts.clock, controllers: opts.extraControllers, providers: opts.extraProviders }), {
     bodyParser: false,
     logger,
   });

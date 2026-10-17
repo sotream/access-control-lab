@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { AuthChallenge, RateLimited } from "../http/errors.js";
 import type { AppRequest } from "../http/request.js";
 import { ACCESS_KEY, type Access } from "./access.js";
+import { PolicyEnforcer } from "../policy/policy.enforcer.js";
 import { AuthFailureLimiter } from "./auth-failure-limiter.js";
 import { AuthError, TokenVerifier } from "./token-verifier.js";
 
@@ -26,6 +27,7 @@ export class AuthGuard implements CanActivate {
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(TokenVerifier) private readonly verifier: TokenVerifier,
     @Inject(AuthFailureLimiter) private readonly limiter: AuthFailureLimiter,
+    @Inject(PolicyEnforcer) private readonly enforcer: PolicyEnforcer,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -53,6 +55,7 @@ export class AuthGuard implements CanActivate {
       req.authFailure = "no_access_declared";
       throw new ForbiddenException();
     }
+    if (access.kind === "policy") await this.enforcer.enforce(req, access, req.principal);
     return true;
   }
 }

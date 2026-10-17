@@ -43,3 +43,7 @@ Added after stage 1 review ("maximum security, honest and verified"). Each item 
 | Image SBOM and image scan in a release build | 8 | |
 | helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3 (API: done), 6 (BFF CSP and headers), 8 (distributed rate limiting) | API part done in stage 3 |
 | Realm: TLS (`sslRequired=all`), production hostname | 8 | dev exception documented |
+
+Stage 4 delivered: `packages/policy` (pure evaluator, 100% coverage gate), `@Policy` enforcement in the API guard, decision log, 404/403 rule (docs/policy.md, ADR-9).
+Carried forward: stage 5 must pass the same read decision to SQL/RLS (`readFilter` parity) and decide-and-write in one transaction; stage 6 must design how the
+BFF conveys the client's network zone (today `MANAGED_ADDRESSES` on the socket address); stage 7 persists the `audit` obligation.

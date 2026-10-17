@@ -13,3 +13,10 @@ export class RateLimited extends HttpException {
     super("Too Many Requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 }
+
+/** 403 that tells the client how to recover: authenticate more strongly (RFC 9470). The only 403 with a code. */
+export class StepUpRequired extends HttpException {
+  constructor(readonly acrValues: string) {
+    super("Forbidden", HttpStatus.FORBIDDEN);
+  }
+}

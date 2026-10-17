@@ -15,6 +15,8 @@ export interface AppConfig {
   jwksCooldownMs: number;
   /** how long a fetched JWKS is trusted before refetch, ms */
   jwksMaxAgeMs: number;
+  /** client addresses (as seen on the socket) that count as the managed network zone; empty means none */
+  managedAddresses: readonly string[];
   corsOrigins: readonly string[];
   bodyLimit: string;
   /** general rate limit: requests per window per client address */
@@ -52,6 +54,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
   }
   if (url.search || url.hash || issuer.endsWith("/")) throw new Error("KEYCLOAK_ISSUER must be the bare issuer URL");
 
+  const managed = list(env, "MANAGED_ADDRESSES", "");
+  for (const a of managed) if (!/^[0-9a-fA-F:.]{2,45}$/.test(a)) throw new Error(`MANAGED_ADDRESSES entry not an IP address: ${a}`);
   const corsOrigins = list(env, "CORS_ORIGINS", "");
   for (const o of corsOrigins) {
     if (o === "*" || !/^https?:\/\/[^/*]+$/.test(o)) throw new Error(`CORS_ORIGINS entry not an exact origin: ${o}`);
@@ -65,6 +69,7 @@ export function loadConfig(env: Env = process.env): AppConfig {
     clockSkewSeconds: int(env, "CLOCK_SKEW_SECONDS", 5, 0, 60),
     jwksCooldownMs: int(env, "JWKS_COOLDOWN_MS", 30_000, 0, 3_600_000),
     jwksMaxAgeMs: int(env, "JWKS_MAX_AGE_MS", 600_000, 1_000, 86_400_000),
+    managedAddresses: list(env, "MANAGED_ADDRESSES", ""),
     corsOrigins,
     bodyLimit: env.BODY_LIMIT ?? "64kb",
     throttleLimit: int(env, "THROTTLE_LIMIT", 120, 1, 100_000),

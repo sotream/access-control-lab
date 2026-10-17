@@ -1,1 +1,16 @@
-{"extends": "../../tsconfig.base.json", "compilerOptions": {"noEmit": true, "experimentalDecorators": true}, "include": ["src", "vitest.config.ts"]}
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "experimentalDecorators": true,
+    "paths": {
+      "@acl/policy": [
+        "../../packages/policy/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "vitest.config.ts"
+  ]
+}
