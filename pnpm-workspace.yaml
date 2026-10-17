@@ -1,3 +1,6 @@
 packages:
   - apps/*
   - packages/*
+  - tests/*
+# supply chain: refuse versions younger than 24 hours (minutes). Unverified for pnpm 12.9.1: checked by install below.
+minimumReleaseAge: 1440
