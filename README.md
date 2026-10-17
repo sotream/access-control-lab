@@ -2,7 +2,7 @@
 
 **Casefile Vault** (repo: `access-control-lab`). Security-first monorepo: a small "case file vault" where who may see what is decided by OAuth2/OIDC identity, roles (RBAC) and attributes (ABAC). The product is deliberately plain (case files with attachments); the point is the security design and the evidence that it works.
 
-Status: stage 2 (identity) in progress. See [docs/plan.md](docs/plan.md).
+Status: stage 2 (identity). Keycloak realm as code, dev users in [docs/dev-users.md](docs/dev-users.md), design in [docs/identity.md](docs/identity.md). Run `cp .env.example .env && docker compose up -d --wait && pnpm test:identity`. See [docs/plan.md](docs/plan.md).
 
 ## Stack
 

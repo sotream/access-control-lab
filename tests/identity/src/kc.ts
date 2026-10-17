@@ -1,8 +1,6 @@
 // Scripted OIDC client for the Casefile realm. No browser: it drives the Keycloak login
 // forms over HTTP, so the tests exercise the real authentication flow, not a shortcut grant.
-import { readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash, createHmac, createPublicKey, createVerify, randomBytes } from "node:crypto";
 
 try {
@@ -60,7 +58,8 @@ export function totp(secret: string, at = Date.now(), offsetSteps = 0): string {
 }
 
 // persisted so that re-running the suite within a minute does not trip Keycloak's replay check
-const STEP_FILE = join(tmpdir(), "acl-identity-otp-steps.json");
+const STEP_DIR = new URL("../.cache/", import.meta.url); // gitignored, inside the package, not a shared temp dir
+const STEP_FILE = new URL("otp-steps.json", STEP_DIR);
 const lastStep = new Map<string, number>(
   (() => {
     try {
@@ -81,6 +80,7 @@ export async function nextOtp(username: string): Promise<string> {
     const step = Math.max(now, (lastStep.get(username) ?? 0) + 1);
     if (step <= now + 1) {
       lastStep.set(username, step);
+      mkdirSync(STEP_DIR, { recursive: true });
       writeFileSync(STEP_FILE, JSON.stringify(Object.fromEntries(lastStep)));
       return totp(TOTP_SECRET, Date.now(), step - now);
     }

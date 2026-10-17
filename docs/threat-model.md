@@ -121,14 +121,14 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 | ID | Threat | Mitigation | Stage | Covered by test |
 |----|--------|------------|-------|-----------------|
 | T-01 | Secrets committed to the repo | `.env` gitignored, `.env.example` only with dev-only values, gitleaks in CI | 1 | |
-| T-02 | OAuth code interception, login CSRF | Authorization Code + PKCE, `state` and `nonce` verified, exact redirect URI match in Keycloak client | 2, 6 | |
-| T-03 | Open redirect after login or logout | Post-login redirect restricted to same-origin relative paths; Keycloak valid redirect URIs without wildcards | 2, 6 | |
+| T-02 | OAuth code interception, login CSRF | Authorization Code + PKCE, `state` and `nonce` verified, exact redirect URI match in Keycloak client | 2, 6 | `tests/identity/src/identity.test.ts` › clients: no-PKCE, `plain`, wrong redirect, code reuse, wrong verifier (Keycloak side; BFF `state`/`nonce` stage 6) |
+| T-03 | Open redirect after login or logout | Post-login redirect restricted to same-origin relative paths; Keycloak valid redirect URIs without wildcards | 2, 6 | `tests/identity/src/identity.test.ts` › clients: redirect URI variants rejected (Keycloak side; BFF post-login redirect stage 6) |
 | T-04 | Token theft from the browser (XSS, localStorage) | BFF: tokens stay server-side, browser holds only an `httpOnly`, `Secure`, `SameSite` session cookie | 6 | |
 | T-05 | CSRF on state-changing requests; session fixation | `SameSite` cookie plus CSRF token or origin check on non-GET; new session id on login | 6 | |
 | T-06 | Logout leaves a live Keycloak session | Logout calls Keycloak end-session with `id_token_hint`; server-side session destroyed | 6 | |
 | T-07 | XSS via app or uploaded content | CSP without `unsafe-inline` where feasible, output encoding by React, attachments served with `Content-Disposition: attachment` and `nosniff` | 6, 8 | |
-| T-08 | Forged or tampered JWT (`alg=none`, HS/RS confusion) | Verify signature against JWKS, algorithm allow-list (RS256/ES256 only, **unverified** which Keycloak default is used), reject `none` | 3 | |
-| T-09 | Token valid for another audience or issuer accepted; over-broad token | Check `iss`, `aud`, `exp`, `nbf` with bounded clock skew; separate API client; minimal scopes | 3 | |
+| T-08 | Forged or tampered JWT (`alg=none`, HS/RS confusion) | Verify signature against JWKS, algorithm allow-list (RS256/ES256 only, **unverified** which Keycloak default is used), reject `none` | 3 | `tests/identity/src/identity.test.ts` › access token claims: RS256, JWKS verify, tampered payload fails (issuer side; API validation stage 3) |
+| T-09 | Token valid for another audience or issuer accepted; over-broad token | Check `iss`, `aud`, `exp`, `nbf` with bounded clock skew; separate API client; minimal scopes | 3 | `tests/identity/src/identity.test.ts` › access token claims: `iss`, `aud` contains `casefile-api`, `azp`, lifetime <= 300s (issuer side; API checks stage 3) |
 | T-10 | Signing key rotation breaks validation or accepts stale key | JWKS cache with refresh on unknown `kid` (rate-limited); no fallback to unsigned claims | 3 | |
 | T-11 | Missing authorization on a route (forgot a guard) | Global guard, default deny, routes opt in via decorators; test enumerates all routes | 4 | |
 | T-12 | Client-side check treated as authorization | All decisions server-side in `packages/policy`; UI hiding is cosmetic only | 4, 6 | |
@@ -136,12 +136,12 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 | T-14 | SQL injection | Parameterised queries only, no string-built SQL, lint rule or review check | 5 | |
 | T-15 | Row leak when app code misses an ABAC check (IDOR, list endpoints) | Postgres RLS keyed on session attributes; app role non-owner, no BYPASSRLS; negative tests per role | 5 | |
 | T-16 | Separation-of-duties violation (reviewer approves own file) | Policy rule `author != approver`, enforced in policy and verified in DB constraint where possible | 4 | |
-| T-17 | `SECRET` read without strong authentication | Policy requires `acr` of MFA; API rejects otherwise with step-up challenge | 2, 4 | |
+| T-17 | `SECRET` read without strong authentication | Policy requires `acr` of MFA; API rejects otherwise with step-up challenge | 2, 4 | `tests/identity/src/identity.test.ts` › MFA: SECRET gets TOTP, `acr=mfa`, `amr` has `otp`, `acr_values=pwd` cannot downgrade (issuer side; API enforcement stage 4) |
 | T-18 | Weak or default Keycloak admin credentials | Dev-only credentials marked; production values from a secret store, not compose defaults | 1, 8 | |
-| T-19 | User edits own clearance, compartments or roles; MFA not enforced | Attributes admin-managed only, user profile attributes non-editable by user, TOTP required for high clearance | 2 | |
-| T-20 | Realm config drift or hand edits | Realm as code, imported on start, reviewed in PRs | 2 | |
-| T-21 | Refresh token replay after theft | Refresh rotation with reuse detection (**unverified** Keycloak setting name and behaviour), short access token lifetime | 2, 6, 9 | |
-| T-22 | Brute force on login | Keycloak brute-force detection enabled, rate limiting at BFF | 2, 8 | |
+| T-19 | User edits own clearance, compartments or roles; MFA not enforced | Attributes admin-managed only, user profile attributes non-editable by user, TOTP required for high clearance | 2 | `tests/identity/src/identity.test.ts` › attributes are admin-only (Account API cannot change clearance, unit, compartments); MFA tests |
+| T-20 | Realm config drift or hand edits | Realm as code, imported on start, reviewed in PRs | 2 | `tests/identity/src/identity.test.ts` › realm hardening as configured (realm and client baseline read back from Keycloak) |
+| T-21 | Refresh token replay after theft | Refresh rotation with reuse detection (**unverified** Keycloak setting name and behaviour), short access token lifetime | 2, 6, 9 | `tests/identity/src/identity.test.ts` › refresh token rotation: old token dead, reuse revokes the chain (Keycloak side; BFF stage 6, attack test stage 9) |
+| T-22 | Brute force on login | Keycloak brute-force detection enabled, rate limiting at BFF | 2, 8 | `tests/identity/src/identity.test.ts` › realm hardening: lockout after repeated failures (Keycloak side; BFF rate limit stage 8) |
 | T-23 | Cross-database access between app and Keycloak | Separate role and database for Keycloak (done in compose init script), distinct credentials | 1 | |
 | T-24 | Repudiation: actions and decisions not recorded | Decision log with reason for allow and deny; audit entry before response | 4, 7 | |
 | T-25 | Break-glass abuse | Justification required, alert raised, always audited | 4, 7 | |
@@ -154,6 +154,12 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 | T-32 | Vulnerable or malicious dependency, action or image | Lockfile frozen in CI, `pnpm audit --prod`, actions pinned by SHA, Dependabot, image scanning, SBOM | 1, 8 | |
 | T-33 | Token tampering abuse cases regress unnoticed | Scripted attack tests in CI (alg=none, wrong aud, expired, replayed refresh, IDOR, escalation) | 9 | |
 | T-34 | Traffic between components sniffed or altered (outside local dev) | TLS between all components in any non-local deployment; local compose is HTTP and loopback-bound by design | 8 | |
+
+## Stage 2 notes
+
+- Dev-only Keycloak `start-dev` still runs over HTTP; tests prove the realm configuration, not a production deployment (T-34 open).
+- Keycloak default realm clients that are unused (`admin-cli`, `security-admin-console`) are disabled in the realm; the master realm admin console is reachable only on 127.0.0.1.
+- Image tags moved to latest verified releases (Keycloak 26.8.1, Postgres 17.11) and pinned by digest; Trivy exception for the postgres image's bundled gosu is in `docs/supply-chain.md` (T-32).
 
 ## Known gaps accepted at stage 1
 

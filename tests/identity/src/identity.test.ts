@@ -109,6 +109,7 @@ describe("MFA: TOTP for SECRET, acr/amr exposure (T-17, T-21)", () => {
     const o = await submitOtp(l, await nextOtp("analyst-secret-b"));
     const c = decode((await exchange(o.result!)).access_token).claims;
     expect(c.amr).toContain("otp");
+    expect(c.acr).toBe("pwd"); // reports the level the client asked for, never more
   });
 
   it("step-up: acr_values=mfa asks a non-SECRET user for a second factor", async () => {
