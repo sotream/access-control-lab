@@ -8,3 +8,5 @@ coverage/
 *.log
 .DS_Store
 infra/keycloak/data/
+*.tsbuildinfo
+next-env.d.ts
