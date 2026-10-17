@@ -194,3 +194,20 @@ export function evaluate(subject: Subject, action: Action, resource: Resource | 
 
   return deny(reason, violated, obligations);
 }
+
+/**
+ * Role-only decision for routes where no resource exists yet (list endpoints, audit, user management).
+ * It says "this subject may attempt the action at all"; per-resource rules must still be applied to each row
+ * (readFilter) or to a loaded resource (evaluate).
+ */
+export function evaluateRole(subject: Subject, action: Action): Decision {
+  if (!isAction(action) || !subjectValid(subject)) return deny("INVALID_INPUT", ["input.well-formed"]);
+  const granting = [...new Set(subject.roles.filter(isRole).filter((r) => ROLE_GRANTS[r].actions.includes(action)))];
+  if (granting.length === 0) return deny("ROLE_NOT_PERMITTED", ["rbac.role-grants-action"]);
+  return Object.freeze({
+    effect: "allow",
+    reason: "ALLOWED",
+    obligations: Object.freeze<Obligation[]>(["audit"]),
+    matchedRules: Object.freeze(["rbac.role-grants-action", ...granting.map((r) => `rbac.grant:${r}`)]),
+  });
+}

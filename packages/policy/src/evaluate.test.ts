@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluate } from "./evaluate.js";
+import { evaluate, evaluateRole } from "./evaluate.js";
 import { ACTIONS, CLEARANCES, ROLES, STATUSES, type Action } from "./model.js";
 import { EXPECTED_RBAC, MFA, STATUS_FOR, at, env, perfect, resource, subject } from "./testkit.js";
 
@@ -456,5 +456,26 @@ describe("create is decided on the candidate resource", () => {
   });
   it("cannot create on behalf of another author", () => {
     expect(evaluate(subject(), "create", resource({ authorId: "other" }), env()).reason).toBe("NOT_OWNER");
+  });
+});
+
+
+describe("evaluateRole: role-only decision for routes without a resource", () => {
+  const cases = ROLES.flatMap((role) => ACTIONS.map((action) => ({ role, action, allowed: EXPECTED_RBAC[role].includes(action) })));
+  it.each(cases)("$role / $action -> $allowed", ({ role, action, allowed }) => {
+    const d = evaluateRole(subject({ roles: [role] }), action);
+    expect(d.effect).toBe(allowed ? "allow" : "deny");
+    expect(d.reason).toBe(allowed ? "ALLOWED" : "ROLE_NOT_PERMITTED");
+  });
+  it("unknown roles, inherited names, no roles: denied", () => {
+    for (const roles of [[], ["x"], ["constructor"], ["__proto__"]]) expect(evaluateRole(subject({ roles }), "read").reason).toBe("ROLE_NOT_PERMITTED");
+  });
+  it("invalid subject or action: INVALID_INPUT", () => {
+    expect(evaluateRole(subject({ clearance: "x" }), "read").reason).toBe("INVALID_INPUT");
+    expect(evaluateRole(subject(), "nope" as Action).reason).toBe("INVALID_INPUT");
+    expect((evaluateRole as (...a: unknown[]) => { reason: string })(null, "read").reason).toBe("INVALID_INPUT");
+  });
+  it("lists every granting role once", () => {
+    expect(evaluateRole(subject({ roles: ["analyst", "analyst", "unit-admin"] }), "read").matchedRules).toEqual(["rbac.role-grants-action", "rbac.grant:analyst", "rbac.grant:unit-admin"]);
   });
 });
