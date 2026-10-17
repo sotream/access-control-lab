@@ -1,8 +1,8 @@
 # access-control-lab
 
-Security-first monorepo: a small "case file vault" where who may see what is decided by OAuth2/OIDC identity, roles (RBAC) and attributes (ABAC). The product is deliberately plain (case files with attachments); the point is the security design and the evidence that it works.
+**Casefile Vault** (repo: `access-control-lab`). Security-first monorepo: a small "case file vault" where who may see what is decided by OAuth2/OIDC identity, roles (RBAC) and attributes (ABAC). The product is deliberately plain (case files with attachments); the point is the security design and the evidence that it works.
 
-Status: planning. See [docs/plan.md](docs/plan.md).
+Status: stage 2 (identity) in progress. See [docs/plan.md](docs/plan.md).
 
 ## Stack
 
