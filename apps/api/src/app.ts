@@ -20,7 +20,10 @@ export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; ext
   // JSON API: nothing renders, so the CSP is "nothing may load or frame"
   app.use(
     helmet({
-      contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+      contentSecurityPolicy: {
+        useDefaults: false, // helmet defaults would re-allow self scripts, styles and images
+        directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'none'"], formAction: ["'none'"] },
+      },
       referrerPolicy: { policy: "no-referrer" },
       crossOriginResourcePolicy: { policy: "same-origin" },
     }),

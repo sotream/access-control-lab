@@ -50,8 +50,7 @@ describe("security headers (T-07, T-34)", () => {
     const r = await get(a.url, "/health");
     expect(r.headers.get("x-powered-by")).toBeNull();
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(r.headers.get("content-security-policy")).toContain("default-src 'none'");
-    expect(r.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(r.headers.get("content-security-policy")).toBe("default-src 'none';frame-ancestors 'none';base-uri 'none';form-action 'none'");
     expect(r.headers.get("referrer-policy")).toBe("no-referrer");
     expect(r.headers.get("strict-transport-security")).toBeTruthy();
     expect(r.headers.get("cross-origin-resource-policy")).toBe("same-origin");

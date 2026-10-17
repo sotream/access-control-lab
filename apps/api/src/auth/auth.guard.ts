@@ -44,7 +44,7 @@ export class AuthGuard implements CanActivate {
       req.principal = await this.verifier.verify(extractBearer(req));
     } catch (e) {
       this.limiter.fail(key);
-      req.authFailure = e instanceof AuthError ? e.reason : "internal";
+      req.authFailure = !presented ? "missing_token" : e instanceof AuthError ? e.reason : "internal";
       throw new AuthChallenge(presented);
     }
 
