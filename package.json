@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "test:identity": "pnpm --filter @acl/identity-tests test:identity"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
