@@ -1,7 +1,7 @@
 # DEV ONLY stack. All ports bind to 127.0.0.1. Credentials come from .env (see .env.example).
 services:
   postgres:
-    image: postgres:17.9-alpine # tag unverified as latest 17.x; bump via Dependabot
+    image: postgres:17.11-alpine # newest 17.x tag on Docker Hub, checked 2026-10-17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set in .env}
@@ -22,7 +22,7 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.0 # tag unverified as latest 26.x
+    image: quay.io/keycloak/keycloak:26.8.1 # latest GitHub release 2026-10-17; 26.4.0 predates many CVE fixes
     restart: unless-stopped
     # start-dev: dev mode only (HTTP, relaxed hostname). Stage 2+ must not assume this is production-like.
     command: ["start-dev"]
