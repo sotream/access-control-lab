@@ -41,5 +41,5 @@ Added after stage 1 review ("maximum security, honest and verified"). Each item 
 | OpenSSF Scorecard | 8 | not enabled: needs repo-read token on a private repo, revisit if repo goes public |
 | dependency-review-action | 8 | needs Advanced Security on private repos; OSV and audit cover lockfile; enable if repo goes public |
 | Image SBOM and image scan in a release build | 8 | |
-| helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3 (validation, headers on API), 6 (BFF CSP), 8 (rate limiting) | |
+| helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3 (API: done), 6 (BFF CSP and headers), 8 (distributed rate limiting) | API part done in stage 3 |
 | Realm: TLS (`sslRequired=all`), production hostname | 8 | dev exception documented |

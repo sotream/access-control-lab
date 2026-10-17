@@ -48,3 +48,13 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 - **Decision.** Run the same scanners but keep results as artifacts and fail the job on findings (CodeQL SARIF gate, OSV,
   Trivy, zizmor, actionlint). Dependabot auto-merge exists but is inert until main requires these checks.
 - **Consequences.** No alerts tab; a failing job is the signal. Exceptions (postgres gosu) are written down in `docs/supply-chain.md`.
+
+## ADR-8: jose for JWT verification, fail-closed principal parsing
+
+- **Context.** Hand-rolled JWT code is where `alg=none`, key confusion and kid tricks live (T-08, T-10).
+- **Decision.** Use `jose` (maintained, zero dependencies, pinned exactly) for signature, `iss`, `aud`, `exp`/`nbf` and JWKS caching with
+  cooldown. Layer our own checks on top where Keycloak semantics matter: algorithm allow-list (RS256, ES256), mandatory `kid`, payload `typ`
+  `Bearer`, `azp` allow-list. Claims become a typed `Principal` through one strict parser; any deviation is 401, never a partial principal.
+- **Alternatives.** `passport-jwt` (adds a strategy layer, no stricter), `@nestjs/jwt` (symmetric-first API), hand-rolled (rejected).
+- **Consequences.** Retired keys linger until the JWKS cache refreshes (<= 10 min). No revocation before `exp`. Role and clearance vocabularies live
+  in the API for now; stage 4 moves the shared types to `packages/policy`.
