@@ -22,7 +22,7 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.0 # tag unverified as latest 26.x
+    image: quay.io/keycloak/keycloak:26.8.1 # tag unverified as latest 26.x
     restart: unless-stopped
     # start-dev: dev mode only (HTTP, relaxed hostname). Stage 2+ must not assume this is production-like.
     command: ["start-dev"]
