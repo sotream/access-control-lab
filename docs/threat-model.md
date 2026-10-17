@@ -127,26 +127,26 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 | T-05 | CSRF on state-changing requests; session fixation | `SameSite` cookie plus CSRF token or origin check on non-GET; new session id on login | 6 | |
 | T-06 | Logout leaves a live Keycloak session | Logout calls Keycloak end-session with `id_token_hint`; server-side session destroyed | 6 | |
 | T-07 | XSS via app or uploaded content | CSP without `unsafe-inline` where feasible, output encoding by React, attachments served with `Content-Disposition: attachment` and `nosniff` | 6, 8 | |
-| T-08 | Forged or tampered JWT (`alg=none`, HS/RS confusion) | Verify signature against JWKS, algorithm allow-list (RS256/ES256 only, **unverified** which Keycloak default is used), reject `none` | 3 | `tests/identity/src/identity.test.ts` › access token claims: RS256, JWKS verify, tampered payload fails (issuer side; API validation stage 3) |
-| T-09 | Token valid for another audience or issuer accepted; over-broad token | Check `iss`, `aud`, `exp`, `nbf` with bounded clock skew; separate API client; minimal scopes | 3 | `tests/identity/src/identity.test.ts` › access token claims: `iss`, `aud` contains `casefile-api`, `azp`, lifetime <= 300s (issuer side; API checks stage 3) |
-| T-10 | Signing key rotation breaks validation or accepts stale key | JWKS cache with refresh on unknown `kid` (rate-limited); no fallback to unsigned claims | 3 | |
-| T-11 | Missing authorization on a route (forgot a guard) | Global guard, default deny, routes opt in via decorators; test enumerates all routes | 4 | |
-| T-12 | Client-side check treated as authorization | All decisions server-side in `packages/policy`; UI hiding is cosmetic only | 4, 6 | |
-| T-13 | Mass assignment alters classification, unit, status or owner | Explicit DTO allow-lists with validation; update rules in policy, not in the DTO | 4 | |
+| T-08 | Forged or tampered JWT (`alg=none`, HS/RS confusion) | Verify signature against JWKS, algorithm allow-list (RS256/ES256 only, **unverified** which Keycloak default is used), reject `none` | 3 | `tests/identity/src/identity.test.ts` › access token claims: RS256, JWKS verify, tampered payload fails (issuer side; API validation stage 3); `apps/api/src/token.test.ts` (tampered payload, `alg=none`, HS256 with the public key as secret, HS*/PS*/RS512, unknown or reused kid, missing kid); `tests/identity/src/api-auth.test.ts` (real tokens: tamper, `alg=none`) |
+| T-09 | Token valid for another audience or issuer accepted; over-broad token | Check `iss`, `aud`, `exp`, `nbf` with bounded clock skew; separate API client; minimal scopes | 3 | `tests/identity/src/identity.test.ts` › access token claims: `iss`, `aud` contains `casefile-api`, `azp`, lifetime <= 300s (issuer side; API checks stage 3); `apps/api/src/token.test.ts` (wrong `aud`/`iss`/`azp`, ID and refresh token as bearer, expired, not yet valid, missing claims); `tests/identity/src/api-auth.test.ts` (real ID, refresh, other-client and master-realm tokens refused) |
+| T-10 | Signing key rotation breaks validation or accepts stale key | JWKS cache with refresh on unknown `kid` (rate-limited); no fallback to unsigned claims | 3 | `apps/api/src/rotation.test.ts` (new kid after bounded refetch, retired kid refused, 60 random kids cause <= 2 fetches); `apps/api/src/token.test.ts` (JWKS down fails closed) |
+| T-11 | Missing authorization on a route (forgot a guard) | Global guard, default deny, routes opt in via decorators; test enumerates all routes | 4 | `apps/api/src/routes.test.ts` (route inventory fails on a route without declared access; only `GET /health` public; undeclared route is 401/403) |
+| T-12 | Client-side check treated as authorization | All decisions server-side in `packages/policy`; UI hiding is cosmetic only | 4, 6 | `apps/api/src/token.test.ts` (identity never taken from headers); `apps/api/src/http.test.ts` (CORS allow-list) |
+| T-13 | Mass assignment alters classification, unit, status or owner | Explicit DTO allow-lists with validation; update rules in policy, not in the DTO | 4 | `apps/api/src/http.test.ts` (ValidationPipe whitelist + forbidNonWhitelisted, transform off). Domain DTOs follow in stages 4/5 |
 | T-14 | SQL injection | Parameterised queries only, no string-built SQL, lint rule or review check | 5 | |
 | T-15 | Row leak when app code misses an ABAC check (IDOR, list endpoints) | Postgres RLS keyed on session attributes; app role non-owner, no BYPASSRLS; negative tests per role | 5 | |
 | T-16 | Separation-of-duties violation (reviewer approves own file) | Policy rule `author != approver`, enforced in policy and verified in DB constraint where possible | 4 | |
-| T-17 | `SECRET` read without strong authentication | Policy requires `acr` of MFA; API rejects otherwise with step-up challenge | 2, 4 | `tests/identity/src/identity.test.ts` › MFA: SECRET gets TOTP, `acr=mfa`, `amr` has `otp`, `acr_values=pwd` cannot downgrade (issuer side; API enforcement stage 4) |
+| T-17 | `SECRET` read without strong authentication | Policy requires `acr` of MFA; API rejects otherwise with step-up challenge | 2, 4 | `tests/identity/src/identity.test.ts` › MFA: SECRET gets TOTP, `acr=mfa`, `amr` has `otp`, `acr_values=pwd` cannot downgrade (issuer side; API enforcement stage 4); `tests/identity/src/api-auth.test.ts` (API surfaces `acr`/`amr` from real SECRET tokens; enforcement is stage 4) |
 | T-18 | Weak or default Keycloak admin credentials | Dev-only credentials marked; production values from a secret store, not compose defaults | 1, 8 | |
 | T-19 | User edits own clearance, compartments or roles; MFA not enforced | Attributes admin-managed only, user profile attributes non-editable by user, TOTP required for high clearance | 2 | `tests/identity/src/identity.test.ts` › attributes are admin-only (Account API cannot change clearance, unit, compartments); MFA tests |
 | T-20 | Realm config drift or hand edits | Realm as code, imported on start, reviewed in PRs | 2 | `tests/identity/src/identity.test.ts` › realm hardening as configured (realm and client baseline read back from Keycloak) |
 | T-21 | Refresh token replay after theft | Refresh rotation with reuse detection (**unverified** Keycloak setting name and behaviour), short access token lifetime | 2, 6, 9 | `tests/identity/src/identity.test.ts` › refresh token rotation: old token dead, reuse revokes the chain (Keycloak side; BFF stage 6, attack test stage 9) |
 | T-22 | Brute force on login | Keycloak brute-force detection enabled, rate limiting at BFF | 2, 8 | `tests/identity/src/identity.test.ts` › realm hardening: lockout after repeated failures (Keycloak side; BFF rate limit stage 8) |
 | T-23 | Cross-database access between app and Keycloak | Separate role and database for Keycloak (done in compose init script), distinct credentials | 1 | |
-| T-24 | Repudiation: actions and decisions not recorded | Decision log with reason for allow and deny; audit entry before response | 4, 7 | |
+| T-24 | Repudiation: actions and decisions not recorded | Decision log with reason for allow and deny; audit entry before response | 4, 7 | `apps/api/src/http.test.ts` (no token, header, claim or query value in logs or errors; server-made request id). Decision log stage 4 |
 | T-25 | Break-glass abuse | Justification required, alert raised, always audited | 4, 7 | |
 | T-26 | Audit log tampering or deletion | Append-only table (no UPDATE/DELETE grants), hash chain, verification command, auditor-only read | 7 | |
-| T-27 | Resource exhaustion (requests, queries, sessions) | Rate limiting, pagination caps, query timeouts, body size limits | 8 | |
+| T-27 | Resource exhaustion (requests, queries, sessions) | Rate limiting, pagination caps, query timeouts, body size limits | 8 | `apps/api/src/http.test.ts` (body limit 413, general throttle 429, auth-failure limiter 429 incl. X-Forwarded-For spoof). Query/pagination caps stage 5 |
 | T-28 | Oversized or hostile uploads | Size and type limits, content sniffing, malware-scan hook, storage quota | 8 | |
 | T-29 | Direct or guessable access to stored files; path traversal | Files stored under random ids outside web root, served only via authorised API stream, filename never used as path | 5, 8 | |
 | T-30 | Attachment swapped after review | Store content hash at upload, verify on read, hash in audit | 7, 8 | |
@@ -160,6 +160,12 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 - Dev-only Keycloak `start-dev` still runs over HTTP; tests prove the realm configuration, not a production deployment (T-34 open).
 - Keycloak default realm clients that are unused (`admin-cli`, `security-admin-console`) are disabled in the realm; the master realm admin console is reachable only on 127.0.0.1.
 - Image tags moved to latest verified releases (Keycloak 26.8.1, Postgres 17.11) and pinned by digest; Trivy exception for the postgres image's bundled gosu is in `docs/supply-chain.md` (T-32).
+
+## Stage 3 notes
+
+- Token validation lives in `apps/api/src/auth`; threats are covered on the API side here and on the issuer side in `docs/identity.md` tests.
+- A key retired at Keycloak keeps verifying until the cached JWKS is refreshed (`JWKS_MAX_AGE_MS`, default 10 min) or an unknown kid triggers a refetch (`JWKS_COOLDOWN_MS`, default 30 s). No token revocation check yet: access tokens live <= 5 min (T-04 residual).
+- The auth-failure limiter is per process and keyed on the socket address; it assumes the API is only reachable from the BFF (T-27 residual for multi-instance).
 
 ## Known gaps accepted at stage 1
 
