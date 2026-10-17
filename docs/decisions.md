@@ -30,3 +30,21 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 
 - **Decision.** pnpm workspaces (`apps/api`, `apps/web`, `packages/policy`). `strict` plus `noUncheckedIndexedAccess`. Node pinned via `.nvmrc` and `engines`, `engine-strict=true`.
 - **Notes.** TypeScript is pinned to `~6.0` because `typescript-eslint` 8.71 rejects TS 7 at runtime. `apps/api` and `packages/policy` are `"type": "module"` (NestJS resolved to an ESM-only release at scaffold time, so CommonJS output failed to compile). Revisit the TS pin when typescript-eslint supports 7.
+
+## ADR-6: Claim design, what lives in the token and what is fetched
+
+- **Context.** The API must decide per request without a round trip to Keycloak, but a bloated token leaks data and goes stale.
+- **Decision.** The access token carries only authorization inputs: role (`realm_access.roles`), `clearance`, `unit`,
+  `compartments`, `aud`, `acr`, `amr`, plus standard claims. No name, email or username. Everything else (profile, display
+  names) is fetched by the BFF from Keycloak when the UI needs it. Attributes are admin-managed in Keycloak, never user-editable.
+- **Consequences.** Attribute changes take effect at the next token (<= 5 min, shorter than a revoked session lingering).
+  The token is the only source of ABAC user attributes; the API must never read them from a request body or unsigned input.
+  `amr` and `acr` are both exposed because forced MFA for SECRET and step-up on request are different mechanisms (see `docs/identity.md`).
+  Resource attributes (classification, unit, compartments) come from Postgres, never from the client.
+
+## ADR-7: Supply-chain gates run in CI without GitHub Advanced Security
+
+- **Context.** The repo is private on a free plan, so code scanning upload and dependency-review are unavailable.
+- **Decision.** Run the same scanners but keep results as artifacts and fail the job on findings (CodeQL SARIF gate, OSV,
+  Trivy, zizmor, actionlint). Dependabot auto-merge exists but is inert until main requires these checks.
+- **Consequences.** No alerts tab; a failing job is the signal. Exceptions (postgres gosu) are written down in `docs/supply-chain.md`.

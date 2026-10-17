@@ -1,7 +1,7 @@
 # DEV ONLY stack. All ports bind to 127.0.0.1. Credentials come from .env (see .env.example).
 services:
   postgres:
-    image: postgres:17.9-alpine # tag unverified as latest 17.x; bump via Dependabot
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 # newest 17.x tag on Docker Hub, checked 2026-10-17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set in .env}
@@ -22,10 +22,10 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.0 # tag unverified as latest 26.x
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:79c623a22abacf3fe6c00a5fb30f5b7843d717b234033b80995891c06116d244 # latest GitHub release 2026-10-17; 26.4.0 predates many CVE fixes
     restart: unless-stopped
     # start-dev: dev mode only (HTTP, relaxed hostname). Stage 2+ must not assume this is production-like.
-    command: ["start-dev"]
+    command: ["start-dev", "--import-realm", "--features-disabled=device-flow,ciba,impersonation"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +37,14 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set in .env}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set in .env}
       KC_HEALTH_ENABLED: "true"
+      # fixed public URL: pins the token issuer and rejects other Host headers
+      KC_HOSTNAME: http://127.0.0.1:8080
+      # substituted into infra/keycloak/realm-casefile.json at import (dev only values, see .env.example)
+      CASEFILE_WEB_SECRET: ${CASEFILE_WEB_SECRET:?set in .env}
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:?set in .env}
+      DEV_TOTP_SECRET: ${DEV_TOTP_SECRET:?set in .env}
+    volumes:
+      - ./infra/keycloak/realm-casefile.json:/opt/keycloak/data/import/realm-casefile.json:ro
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9000:9000" # management (health, metrics)

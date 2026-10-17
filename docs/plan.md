@@ -27,3 +27,19 @@ Case file vault. Users upload and read case files. Each file has a classificatio
 ## Definition of done per stage
 
 Tests pass, negative tests exist for the new control, docs updated, threat model entries linked to the tests that cover them.
+
+## Security additions and owning stage
+
+Added after stage 1 review ("maximum security, honest and verified"). Each item has one owning stage.
+
+| Addition | Stage | Status |
+|----------|-------|--------|
+| CI: CodeQL, OSV-Scanner, Trivy image scan, SBOM artifact, actionlint, zizmor, identity job | 2 | done in stage 2 PR |
+| Supply chain: install scripts off, minimum release age, image digests, Dependabot cooldown | 2 | done |
+| Repo hygiene: SECURITY.md, CODEOWNERS, PR checklist, editorconfig, signed-commit guidance | 2 | done |
+| Dependabot auto-merge (minor/patch) | 2 | file present, inert until owner sets main ruleset and `DEPENDABOT_AUTOMERGE=true` |
+| OpenSSF Scorecard | 8 | not enabled: needs repo-read token on a private repo, revisit if repo goes public |
+| dependency-review-action | 8 | needs Advanced Security on private repos; OSV and audit cover lockfile; enable if repo goes public |
+| Image SBOM and image scan in a release build | 8 | |
+| helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3 (validation, headers on API), 6 (BFF CSP), 8 (rate limiting) | |
+| Realm: TLS (`sslRequired=all`), production hostname | 8 | dev exception documented |

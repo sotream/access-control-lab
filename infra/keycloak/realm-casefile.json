@@ -1,0 +1,779 @@
+{
+  "realm": "casefile",
+  "displayName": "Casefile Vault",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "passwordPolicy": "length(14) and notUsername and passwordHistory(3) and notEmail",
+  "accessTokenLifespan": 300,
+  "accessCodeLifespan": 60,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "defaultSignatureAlgorithm": "RS256",
+  "eventsEnabled": true,
+  "eventsExpiration": 604800,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "browserFlow": "browser-casefile",
+  "browserSecurityHeaders": {
+    "contentSecurityPolicyReportOnly": "",
+    "xContentTypeOptions": "nosniff",
+    "referrerPolicy": "no-referrer",
+    "xRobotsTag": "none",
+    "xFrameOptions": "DENY",
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'none'; object-src 'none';",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  },
+  "attributes": {
+    "acr.loa.map": "{\"pwd\": \"1\", \"mfa\": \"2\"}"
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "analyst",
+        "description": "Reads and writes case files within clearance and compartments"
+      },
+      {
+        "name": "reviewer",
+        "description": "Reviews and approves case files, never own"
+      },
+      {
+        "name": "unit-admin",
+        "description": "Administers case files of own unit"
+      },
+      {
+        "name": "auditor",
+        "description": "Reads the audit log only"
+      },
+      {
+        "name": "platform-admin",
+        "description": "Platform operations, no implicit case access"
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-casefile",
+    "description": "Account self-service only",
+    "composite": true,
+    "composites": {
+      "client": {
+        "account": [
+          "view-profile",
+          "manage-account"
+        ]
+      }
+    }
+  },
+  "authenticationFlows": [
+    {
+      "alias": "browser-casefile",
+      "description": "Casefile browser flow: cookie or password; TOTP forced for SECRET clearance (independent of acr); TOTP on step-up request",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true,
+          "flowAlias": "casefile-forms"
+        }
+      ]
+    },
+    {
+      "alias": "casefile-forms",
+      "description": "",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "auth-username-password-form",
+          "authenticatorConfig": "ref-pwd"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true,
+          "flowAlias": "casefile-otp-secret"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true,
+          "flowAlias": "casefile-level1"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true,
+          "flowAlias": "casefile-level2"
+        }
+      ]
+    },
+    {
+      "alias": "casefile-otp-secret",
+      "description": "forced TOTP when clearance is SECRET; no LoA condition on purpose, so acr_values cannot skip it",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "cond-is-secret"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "ref-otp"
+        }
+      ]
+    },
+    {
+      "alias": "casefile-level1",
+      "description": "records LoA 1 (password) for non-SECRET users",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "cond-not-secret"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "conditional-level-of-authentication",
+          "authenticatorConfig": "cond-loa-1"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "allow-access-authenticator"
+        }
+      ]
+    },
+    {
+      "alias": "casefile-level2",
+      "description": "LoA 2 (mfa): SECRET users already passed TOTP; others are asked for TOTP only when a client requests acr mfa",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "conditional-level-of-authentication",
+          "authenticatorConfig": "cond-loa-2"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true,
+          "flowAlias": "casefile-otp-stepup"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "allow-access-authenticator"
+        }
+      ]
+    },
+    {
+      "alias": "casefile-otp-stepup",
+      "description": "TOTP step-up for non-SECRET users",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "cond-not-secret-2"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "ref-otp2"
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "cond-is-secret",
+      "config": {
+        "attribute_name": "clearance",
+        "attribute_expected_value": "SECRET",
+        "not": "false"
+      }
+    },
+    {
+      "alias": "cond-not-secret",
+      "config": {
+        "attribute_name": "clearance",
+        "attribute_expected_value": "SECRET",
+        "not": "true"
+      }
+    },
+    {
+      "alias": "cond-not-secret-2",
+      "config": {
+        "attribute_name": "clearance",
+        "attribute_expected_value": "SECRET",
+        "not": "true"
+      }
+    },
+    {
+      "alias": "cond-loa-1",
+      "config": {
+        "loa-condition-level": "1",
+        "loa-max-age": "36000",
+        "loa-store-in-user-session": "true"
+      }
+    },
+    {
+      "alias": "cond-loa-2",
+      "config": {
+        "loa-condition-level": "2",
+        "loa-max-age": "36000",
+        "loa-store-in-user-session": "true"
+      }
+    },
+    {
+      "alias": "ref-pwd",
+      "config": {
+        "default.reference.value": "pwd",
+        "default.reference.maxAge": "36000"
+      }
+    },
+    {
+      "alias": "ref-otp",
+      "config": {
+        "default.reference.value": "otp",
+        "default.reference.maxAge": "36000"
+      }
+    },
+    {
+      "alias": "ref-otp2",
+      "config": {
+        "default.reference.value": "otp",
+        "default.reference.maxAge": "36000"
+      }
+    }
+  ],
+  "clientScopeMappings": {
+    "account": [
+      {
+        "client": "account-console",
+        "roles": [
+          "view-profile",
+          "manage-account"
+        ]
+      }
+    ]
+  },
+  "scopeMappings": [
+    {
+      "client": "casefile-web",
+      "roles": [
+        "analyst",
+        "reviewer",
+        "unit-admin",
+        "auditor",
+        "platform-admin"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "casefile-web",
+      "name": "Casefile Vault web (BFF)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${CASEFILE_WEB_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "",
+      "baseUrl": "",
+      "adminUrl": "",
+      "redirectUris": [
+        "http://127.0.0.1:3000/api/auth/callback"
+      ],
+      "webOrigins": [],
+      "fullScopeAllowed": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:3000/",
+        "access.token.lifespan": "300",
+        "client.use.lightweight.access.token.enabled": "false",
+        "use.refresh.tokens": "true",
+        "standard.token.exchange.enabled": "false",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "acr"
+      ],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "audience-casefile-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "casefile-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true",
+            "lightweight.claim": "false"
+          }
+        },
+        {
+          "name": "clearance",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "clearance",
+            "claim.name": "clearance",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "aggregate.attrs": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true",
+            "lightweight.claim": "false"
+          }
+        },
+        {
+          "name": "unit",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "unit",
+            "claim.name": "unit",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "aggregate.attrs": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true",
+            "lightweight.claim": "false"
+          }
+        },
+        {
+          "name": "compartments",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "compartments",
+            "claim.name": "compartments",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "aggregate.attrs": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true",
+            "lightweight.claim": "false"
+          }
+        },
+        {
+          "name": "amr",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "lightweight.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "casefile-api",
+      "name": "Casefile Vault API (resource server)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "admin-cli",
+      "enabled": false,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false
+    },
+    {
+      "clientId": "security-admin-console",
+      "enabled": false,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    }
+  ],
+  "users": [
+    {
+      "username": "analyst-official",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "analyst-official@casefile.invalid",
+      "firstName": "analyst-official",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "OFFICIAL"
+        ],
+        "unit": [
+          "alpha"
+        ]
+      },
+      "realmRoles": [
+        "analyst",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "analyst-secret-a",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "analyst-secret-a@casefile.invalid",
+      "firstName": "analyst-secret-a",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "SECRET"
+        ],
+        "unit": [
+          "alpha"
+        ],
+        "compartments": [
+          "A"
+        ]
+      },
+      "realmRoles": [
+        "analyst",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\": \"${DEV_TOTP_SECRET}\"}",
+          "credentialData": "{\"subType\": \"totp\", \"digits\": 6, \"period\": 30, \"algorithm\": \"HmacSHA1\", \"counter\": 0}",
+          "userLabel": "dev-only seeded TOTP"
+        }
+      ]
+    },
+    {
+      "username": "analyst-secret-b",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "analyst-secret-b@casefile.invalid",
+      "firstName": "analyst-secret-b",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "SECRET"
+        ],
+        "unit": [
+          "alpha"
+        ],
+        "compartments": [
+          "B"
+        ]
+      },
+      "realmRoles": [
+        "analyst",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\": \"${DEV_TOTP_SECRET}\"}",
+          "credentialData": "{\"subType\": \"totp\", \"digits\": 6, \"period\": 30, \"algorithm\": \"HmacSHA1\", \"counter\": 0}",
+          "userLabel": "dev-only seeded TOTP"
+        }
+      ]
+    },
+    {
+      "username": "reviewer",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "reviewer@casefile.invalid",
+      "firstName": "reviewer",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "CONFIDENTIAL"
+        ],
+        "unit": [
+          "alpha"
+        ],
+        "compartments": [
+          "A"
+        ]
+      },
+      "realmRoles": [
+        "reviewer",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "unit-admin-alpha",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "unit-admin-alpha@casefile.invalid",
+      "firstName": "unit-admin-alpha",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "CONFIDENTIAL"
+        ],
+        "unit": [
+          "alpha"
+        ]
+      },
+      "realmRoles": [
+        "unit-admin",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "unit-admin-beta",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "unit-admin-beta@casefile.invalid",
+      "firstName": "unit-admin-beta",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "CONFIDENTIAL"
+        ],
+        "unit": [
+          "beta"
+        ]
+      },
+      "realmRoles": [
+        "unit-admin",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "auditor",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "auditor@casefile.invalid",
+      "firstName": "auditor",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "OFFICIAL"
+        ],
+        "unit": [
+          "hq"
+        ]
+      },
+      "realmRoles": [
+        "auditor",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "lockout-victim",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "lockout-victim@casefile.invalid",
+      "firstName": "lockout-victim",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "OFFICIAL"
+        ],
+        "unit": [
+          "alpha"
+        ]
+      },
+      "realmRoles": [
+        "analyst",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "platform-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "platform-admin@casefile.invalid",
+      "firstName": "platform-admin",
+      "lastName": "Dev",
+      "attributes": {
+        "clearance": [
+          "OFFICIAL"
+        ],
+        "unit": [
+          "hq"
+        ]
+      },
+      "realmRoles": [
+        "platform-admin",
+        "default-roles-casefile"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"clearance\", \"displayName\": \"Clearance\", \"validations\": {\"options\": {\"options\": [\"OFFICIAL\", \"CONFIDENTIAL\", \"SECRET\"]}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"unit\", \"displayName\": \"Unit\", \"validations\": {\"options\": {\"options\": [\"alpha\", \"beta\", \"hq\"]}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"compartments\", \"displayName\": \"Compartments\", \"validations\": {\"options\": {\"options\": [\"A\", \"B\"]}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": true}]}"
+          ],
+          "kc.user.profile.unmanagedAttributePolicy": []
+        }
+      }
+    ]
+  }
+}

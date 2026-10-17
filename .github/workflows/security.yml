@@ -1,0 +1,115 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1" # weekly: new advisories appear without any code change
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    # Code scanning upload needs GitHub Advanced Security on private repos, so results stay local:
+    # SARIF is kept as an artifact and any finding fails the job.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read # codeql-action reads its own workflow run on private repos
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          upload: never
+          output: sarif-results
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: codeql-sarif
+          path: sarif-results
+      - name: Fail on any finding
+        run: |
+          n=$(jq '[.runs[].results[]?] | length' sarif-results/*.sarif | paste -sd+ - | bc)
+          echo "CodeQL findings: $n"
+          test "$n" -eq 0
+
+  osv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        with:
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
+
+  images:
+    # Compose-pinned images. HIGH/CRITICAL with an available fix fail the job.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read image refs from docker-compose.yml
+        id: refs
+        run: |
+          echo "postgres=$(docker compose config --images | grep '^postgres')" >> "$GITHUB_OUTPUT"
+          echo "keycloak=$(docker compose config --images | grep keycloak)" >> "$GITHUB_OUTPUT"
+        env:
+          POSTGRES_USER: x
+          POSTGRES_PASSWORD: x
+          POSTGRES_DB: x
+          KEYCLOAK_DB_NAME: x
+          KEYCLOAK_DB_USER: x
+          KEYCLOAK_DB_PASSWORD: x
+          KEYCLOAK_ADMIN_PASSWORD: x
+          KEYCLOAK_ADMIN: x
+          CASEFILE_WEB_SECRET: x
+          DEV_USER_PASSWORD: x
+          DEV_TOTP_SECRET: x
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.refs.outputs.keycloak }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.refs.outputs.postgres }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          # upstream postgres images ship a gosu built with an old Go stdlib (verified 2026-10-17 on 17.11 and 18.4);
+          # gosu only runs once at container start to drop root. See docs/supply-chain.md.
+          skip-files: usr/local/bin/gosu
+
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          advanced-security: false

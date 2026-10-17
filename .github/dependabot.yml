@@ -3,18 +3,21 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 } # do not take a release younger than a week
     groups:
       minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 } # do not take a release younger than a week
     groups:
       minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker-compose
     directory: /
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 } # do not take a release younger than a week
     groups:
       minor-and-patch:
         update-types: [minor, patch]
