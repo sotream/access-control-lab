@@ -70,8 +70,7 @@ cannot change any of them through the Account API, and the test fails when the p
 `acr.loa.map` is `{"pwd": 1, "mfa": 2}`. Authenticator references (`default.reference.value`) feed `amr`.
 
 Observed results (tests): non-SECRET: `acr=pwd`, `amr=[pwd]`. SECRET with TOTP: `acr=mfa`, `amr=[pwd,otp]`.
-SECRET with `acr_values=pwd`: TOTP still demanded; `acr` then reports the lower level (**the exact claim value in this
-downgrade case is not asserted**, only that TOTP is demanded and `amr` contains `otp`).
+SECRET with `acr_values=pwd`: TOTP is still demanded, `amr=[pwd,otp]`, `acr=pwd` (the level the client asked for; asserted).
 Replay: Keycloak rejects a TOTP step already used by that user, which the test helper accounts for.
 
 **How the API should use it (stage 3/4):** treat `amr` containing `otp` AND `acr == "mfa"` as MFA for `SECRET` reads;
