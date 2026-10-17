@@ -58,3 +58,16 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 - **Alternatives.** `passport-jwt` (adds a strategy layer, no stricter), `@nestjs/jwt` (symmetric-first API), hand-rolled (rejected).
 - **Consequences.** Retired keys linger until the JWKS cache refreshes (<= 10 min). No revocation before `exp`. Role and clearance vocabularies live
   in the API for now; stage 4 moves the shared types to `packages/policy`.
+
+## ADR-9: Default deny, deny overrides, 404 versus 403
+
+- **Context.** Authorization bugs are usually a missing check or an unclear precedence (T-11, T-15). Responses can also leak that a record exists.
+- **Decision.** (1) Default deny: no declared access, no grant, unknown input or unknown value all deny. (2) Deny overrides allow: every rule is
+  evaluated; any violation denies; role grants never rescue an ABAC failure; break-glass may override need-to-know only, never the clearance floor or step-up.
+  (3) The decision is a pure function in `packages/policy` so it is table-testable, property-testable and shareable with the data layer. (4) Refusals
+  hide existence: 404 when the subject may not read the resource (also for nonexistent ids, identical body), 403 when they can read it but not do the action,
+  403 with an RFC 9470 challenge when only MFA is missing and the subject is cleared.
+- **Alternatives.** An OPA/Rego engine (more expressive, but another runtime and language to verify; reconsider when rules outgrow code), CASL (attribute
+  conditions in a library, weaker default-deny story), 403 everywhere (simpler, but confirms which ids exist).
+- **Consequences.** A user who is legitimately refused a write on a file they cannot read sees 404, which can confuse support; the decision log carries the true reason.
+  The reason codes are an API for logs and tests and must stay stable.
