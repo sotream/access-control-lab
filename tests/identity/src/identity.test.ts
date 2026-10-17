@@ -2,6 +2,7 @@
 // Stage 2 identity evidence. Needs the compose stack running with the dev realm imported.
 // Each describe names the threat IDs from docs/threat-model.md it covers.
 import { beforeAll, describe, expect, it } from "vitest";
+import { SEED } from "./seed.js";
 import {
   CLIENT_ID,
   OIDC,
@@ -25,17 +26,6 @@ import {
   type Claims,
   type Tokens,
 } from "./kc.js";
-
-const SEED = {
-  "analyst-official": { role: "analyst", clearance: "OFFICIAL", unit: "alpha", compartments: undefined },
-  "analyst-secret-a": { role: "analyst", clearance: "SECRET", unit: "alpha", compartments: ["A"] },
-  "analyst-secret-b": { role: "analyst", clearance: "SECRET", unit: "alpha", compartments: ["B"] },
-  reviewer: { role: "reviewer", clearance: "CONFIDENTIAL", unit: "alpha", compartments: ["A"] },
-  "unit-admin-alpha": { role: "unit-admin", clearance: "CONFIDENTIAL", unit: "alpha", compartments: undefined },
-  "unit-admin-beta": { role: "unit-admin", clearance: "CONFIDENTIAL", unit: "beta", compartments: undefined },
-  auditor: { role: "auditor", clearance: "OFFICIAL", unit: "hq", compartments: undefined },
-  "platform-admin": { role: "platform-admin", clearance: "OFFICIAL", unit: "hq", compartments: undefined },
-} as const;
 
 const tokens = new Map<string, Tokens>();
 const claimsOf = (u: string): Claims => decode(tokens.get(u)!.access_token).claims;
