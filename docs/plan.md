@@ -55,3 +55,6 @@ justification (append-only table, hash chain); stage 8 adds attachments/file sto
 Stage 6 delivered: Next.js BFF with server-side OIDC (openid-client), encrypted Postgres sessions, CSRF scheme, allow-listed API client, strict CSP, functional pages (docs/bff.md, ADR-13..16).
 Carried forward: stage 7 persists the `audit` obligation and break-glass justification and should log BFF login/logout/refresh-failure events; stage 8 adds login-route rate limiting, TLS between components, key-ring rotation procedure,
 and a decision on conveying the client network zone; stage 10 designs the UI (the pages here are intentionally unstyled).
+
+Stage 7 delivered: HMAC-chained append-only audit log (decisions, break-glass, BFF authentication events, auditor reads/exports), database-enforced linearity, checkpoints, `audit:verify` and `audit:checkpoint`, auditor endpoints and page (docs/audit.md, ADR-17..19).
+Carried forward to stage 8: key management for `AUDIT_HMAC_KEYS`, `SESSION_ENCRYPTION_KEYS` and the DB passwords (secret store, rotation procedure), external anchoring of checkpoints (WORM or second system), retention/partitioning of the audit table, audit-write throughput measurement, rate limiting of login and the auditor endpoints, TLS between components.

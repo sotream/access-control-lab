@@ -10,6 +10,7 @@ beforeAll(() => {
     API_BASE_URL: "http://127.0.0.1:3001",
     WEB_DATABASE_URL: "postgres://u:p@127.0.0.1:5432/db",
     SESSION_ENCRYPTION_KEYS: KEY,
+    AUDIT_HMAC_KEYS: `audit-1:${randomBytes(32).toString("base64")}`,
     COOKIE_SECURE: "false",
   });
 });

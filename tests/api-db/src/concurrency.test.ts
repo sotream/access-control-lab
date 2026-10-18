@@ -4,6 +4,7 @@ import { CaseFileRepository } from "../../../apps/api/src/db/case-file.repositor
 import { withContext } from "../../../apps/api/src/db/context.js";
 import { sql } from "../../../apps/api/src/db/sql.js";
 import { JsonLogger } from "../../../apps/api/src/http/logger.js";
+import { MemoryAuditWriter } from "../../../apps/api/src/audit/audit.js";
 import { CaseFileService, type Caller } from "../../../apps/api/src/casefiles/case-file.service.js";
 import { adminPool, appPool, appUrl, clearRows, ctxOf, envOf, insertRow, MFA_ENV, subjectOf } from "./db.js";
 import pg from "pg";
@@ -11,7 +12,7 @@ import pg from "pg";
 const admin = adminPool();
 const pool = appPool(8);
 const logs: string[] = [];
-const files = new CaseFileService(pool, new CaseFileRepository(), new JsonLogger((l) => logs.push(l)));
+const files = new CaseFileService(pool, new CaseFileRepository(), new JsonLogger((l) => logs.push(l)), new MemoryAuditWriter());
 afterAll(async () => {
   await clearRows(admin);
   await admin.end();
@@ -162,6 +163,22 @@ describe("authoritative decision inside the transaction (defence in depth)", () 
     }
   });
 
+  it("every authoritative refusal reaches the audit writer with the real reason and the authoritative marker", async () => {
+    const mem = new MemoryAuditWriter();
+    const svc = new CaseFileService(pool, new CaseFileRepository(), new JsonLogger(() => undefined), mem);
+    const hidden = await insertRow(admin, { classification: "SECRET", compartments: ["A"], status: "approved" });
+    const own = await insertRow(admin, { classification: "SECRET", compartments: ["A"], status: "approved" });
+    await settle(svc.read(analyst("u1"), hidden)); // uncleared: hidden 404
+    await settle(svc.read(caller({ roles: ["analyst"], clearance: "SECRET", compartments: ["A"] }), own)); // cleared, no MFA: step-up
+    await settle(svc.read(analyst("u1"), "00000000-0000-4000-8000-0000000000ff")); // really not found
+    expect(mem.entries.map((e) => [e.effect, e.reasonCode])).toEqual([
+      ["deny", "CLEARANCE_TOO_LOW"],
+      ["deny", "STEP_UP_REQUIRED"],
+      ["deny", "RESOURCE_NOT_FOUND"],
+    ]);
+    for (const e of mem.entries) expect(e.details).toMatchObject({ authoritative: true });
+  });
+
   it("cleared but without MFA: step-up challenge (403) instead of 404; uncleared without MFA: 404", async () => {
     const id = await insertRow(admin, { classification: "SECRET", compartments: ["A"], status: "approved" });
     const cleared = await settle(files.read(caller({ roles: ["analyst"], clearance: "SECRET", compartments: ["A"] }), id));
@@ -205,7 +222,7 @@ describe("authoritative decision inside the transaction (defence in depth)", () 
         throw Object.assign(new Error("policy: ROLE_NOT_PERMITTED"), { code: "42501" });
       }
     }
-    const strict = new CaseFileService(pool, new RefusingRepo(), new JsonLogger((l) => logs.push(l)));
+    const strict = new CaseFileService(pool, new RefusingRepo(), new JsonLogger((l) => logs.push(l)), new MemoryAuditWriter());
     const id = await insertRow(admin, { authorId: "u1", status: "draft" });
     const r = await settle(strict.update(analyst("u1"), id, { title: "x", version: 1 }));
     expect(r.ok).toBe(false);
