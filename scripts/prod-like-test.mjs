@@ -13,18 +13,23 @@ const root = new URL("../", import.meta.url).pathname;
 const dir = join(root, "secrets-dev", "prod-like");
 const compose = ["compose", "-f", "docker-compose.prod-like.yml", "-f", "docker-compose.prod-like.test.yml"];
 const NODE_IMAGE = "node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5";
-const ca = readFileSync(join(dir, "ca.crt"));
+// The stack's CA is trusted through NODE_EXTRA_CA_CERTS (set by re-running this script once the files exist), not handed to each request.
+if (!process.env.NODE_EXTRA_CA_CERTS) {
+  if (!process.argv.includes("--fast")) execFileSync("node", ["scripts/prod-like-setup.mjs"], { cwd: root, stdio: "inherit" });
+  const r = spawnSync(process.execPath, [new URL(import.meta.url).pathname, ...process.argv.slice(2)], { cwd: root, stdio: "inherit", env: { ...process.env, NODE_EXTRA_CA_CERTS: join(dir, "ca.crt") } });
+  process.exit(r.status ?? 1);
+}
 const env = Object.fromEntries(readFileSync(join(dir, "compose.env"), "utf8").split("\n").filter(Boolean).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
 
 const sh = (cmd, args, o = {}) => execFileSync(cmd, args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...o });
 const dc = (...args) => sh("docker", [...compose, ...args]);
-const tryRun = (cmd, args) => spawnSync(cmd, args, { cwd: root, encoding: "utf8" });
+const tryRun = (cmd, args, extraEnv) => spawnSync(cmd, args, { cwd: root, encoding: "utf8", ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {}) });
 
 const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
 const fast = process.argv.includes("--fast"); // mutation runs: stack already built, no setup
 let failed = 0;
 async function check(name, fn) {
-  if (only && !new RegExp(only, "i").test(name)) return;
+  if (only && !only.split("|").some((part) => name.toLowerCase().includes(part.toLowerCase()))) return;
   try {
     await fn();
     console.log(`PASS  ${name}`);
@@ -41,7 +46,7 @@ const assert = (c, m) => {
 function request(host, path, { method = "GET", headers = {}, body, jar } = {}) {
   return new Promise((resolve, reject) => {
     const h = { host, ...headers, ...(jar?.size ? { cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; ") } : {}) };
-    const req = https.request({ host: "127.0.0.1", servername: host, port: 443, path, method, headers: h, ca, lookup: (_n, _o, cb) => cb(null, "127.0.0.1", 4) }, (res) => {
+    const req = https.request({ host: "127.0.0.1", servername: host, port: 443, path, method, headers: h, lookup: (_n, _o, cb) => cb(null, "127.0.0.1", 4) }, (res) => {
       const chunks = [];
       res.on("data", (c) => chunks.push(c));
       res.on("end", () => {
@@ -74,7 +79,6 @@ const reachable = (port) =>
 
 // ------------------------------------------------------------------ bring the stack up
 console.log("starting the prod-like stack (first run builds the images)...");
-if (!fast) sh("node", ["scripts/prod-like-setup.mjs"]);
 try {
   dc("up", "-d", ...(fast ? [] : ["--build"]), "--wait", "--wait-timeout", "600");
 } catch (e) {
@@ -155,13 +159,9 @@ await check("TLS and headers: HTTPS works with the stack's CA, HSTS is set, no S
   assert(/max-age=31536000/.test(r.headers["strict-transport-security"] ?? ""), "HSTS missing");
   for (const h of ["server", "via", "alt-svc", "x-powered-by"]) assert(r.headers[h] === undefined, `${h} is exposed`);
   assert(r.headers["x-content-type-options"] === "nosniff" && r.headers["content-security-policy"], "BFF headers missing");
-  let plainTlsRefused = false;
-  try {
-    await new Promise((res, rej) => https.get({ host: "127.0.0.1", port: 443, servername: "vault.localhost", headers: { host: "vault.localhost" }, lookup: (_n, _o, cb) => cb(null, "127.0.0.1", 4) }, res).on("error", rej)); // no CA given: must fail verification
-  } catch {
-    plainTlsRefused = true;
-  }
-  assert(plainTlsRefused, "certificate is trusted without the stack's CA");
+  // a client that does not know the stack's CA must refuse the certificate
+  const probe = tryRun("node", ["-e", "require('https').get({host:'127.0.0.1',port:443,servername:'vault.localhost',headers:{host:'vault.localhost'},lookup:(n,o,cb)=>cb(null,'127.0.0.1',4)},()=>process.exit(0)).on('error',()=>process.exit(1))"], { NODE_EXTRA_CA_CERTS: "" });
+  assert(probe.status === 1, "the certificate is trusted without the stack's CA");
 });
 
 await check("identity provider: only the realm and its resources are reachable through the proxy (no admin console, master realm, health, metrics)", async () => {
