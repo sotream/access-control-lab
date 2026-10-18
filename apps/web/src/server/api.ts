@@ -14,7 +14,18 @@ export const ROUTES: readonly { method: string; path: RegExp }[] = [
   { method: "POST", path: new RegExp(`^/case-files/${UUID}/submit$`) },
   { method: "POST", path: new RegExp(`^/case-files/${UUID}/approve$`) },
   { method: "GET", path: new RegExp(`^/case-files/${UUID}/export$`) },
+  // auditor endpoints (the API refuses everyone else; these entries only make them reachable through the BFF)
+  { method: "GET", path: /^\/audit-log$/ },
+  { method: "GET", path: /^\/audit-log\/export$/ },
+  { method: "GET", path: /^\/audit-log\/checkpoints$/ },
+  { method: "GET", path: /^\/audit-log\/verify$/ },
 ];
+
+/** Query parameters that may be forwarded, per path. Everything else is refused (never silently passed on). */
+export const QUERY_KEYS: Readonly<Record<string, readonly string[]>> = {
+  "/audit-log": ["from", "to", "actor", "resource", "action", "effect", "limit", "cursor"],
+  "/audit-log/export": ["from", "to", "actor", "resource", "action", "effect", "cursor", "format"],
+};
 
 export const allowed = (method: string, path: string): boolean => ROUTES.some((r) => r.method === method && r.path.test(path));
 
@@ -31,6 +42,8 @@ export interface ApiResult {
   retryAfter: string | null;
   /** true when the API asked for a stronger authentication (RFC 9470) */
   stepUp: boolean;
+  /** `X-Audit-Proof` of an audit export, passed through unchanged (base64 JSON) */
+  proof: string | null;
 }
 
 export class ProxyRefused extends Error {
@@ -62,8 +75,14 @@ async function readCapped(res: Response, max: number): Promise<string> {
  * from configuration, path and method from the allow-list, no redirects followed, size and time limits.
  * `breakGlass` is the ONLY way the break-glass header is sent (the dedicated route sets it; the generic proxy never does).
  */
-export async function apiFetch(session: Session, method: string, path: string, opts: { json?: unknown; breakGlass?: string } = {}): Promise<ApiResult> {
+export async function apiFetch(session: Session, method: string, path: string, opts: { json?: unknown; breakGlass?: string; query?: Record<string, string | undefined> } = {}): Promise<ApiResult> {
   if (!allowed(method, path)) throw new ProxyRefused(404);
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts.query ?? {})) {
+    if (v === undefined || v === "") continue;
+    if (!(QUERY_KEYS[path] ?? []).includes(k) || v.length > 200) throw new ProxyRefused(400); // unknown or oversized parameter: refuse, do not forward
+    qs.set(k, v);
+  }
   const headers: Record<string, string> = { authorization: `Bearer ${session.tokens.accessToken}`, accept: "application/json" };
   let body: string | undefined;
   if (opts.json !== undefined) {
@@ -73,14 +92,15 @@ export async function apiFetch(session: Session, method: string, path: string, o
   }
   if (opts.breakGlass !== undefined) headers["x-break-glass-justification"] = opts.breakGlass.trim().slice(0, 500);
 
-  const res = await fetch(`${config().apiBase}${path}`, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+  const res = await fetch(`${config().apiBase}${path}${qs.size ? `?${qs}` : ""}`, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
   if (res.status >= 300 && res.status < 400) throw new ProxyRefused(502);
   const text = await readCapped(res, MAX_RESPONSE);
   const www = res.headers.get("www-authenticate");
   return {
     status: res.status,
     body: text,
-    contentType: res.headers.get("content-type")?.split(";")[0] === "application/json" ? "application/json" : "text/plain",
+    contentType: ((t) => (t === "application/json" || t === "text/csv" || t === "application/x-ndjson" ? t : "text/plain"))(res.headers.get("content-type")?.split(";")[0]),
+    proof: res.headers.get("x-audit-proof"),
     wwwAuthenticate: www,
     retryAfter: res.headers.get("retry-after"),
     stepUp: res.status === 403 && (www ?? "").includes("insufficient_user_authentication"),

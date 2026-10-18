@@ -7,7 +7,7 @@ import { enumerate } from "../../../apps/api/test/inventory.js";
 import { appUrl } from "./db.js";
 
 describe("route inventory of the real application", () => {
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile", DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS! });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile", DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, AUTH_FAIL_LIMIT: "10000" });
   const started = createApp(cfg).then(async (app) => (await app.listen(0, "127.0.0.1"), app));
   afterAll(async () => (await started).close());
 
@@ -18,6 +18,10 @@ describe("route inventory of the real application", () => {
     expect(paths).toEqual(
       [
         "DELETE /case-files/:id",
+        "GET /audit-log",
+        "GET /audit-log/checkpoints",
+        "GET /audit-log/export",
+        "GET /audit-log/verify",
         "GET /case-files",
         "GET /case-files/:id",
         "GET /case-files/:id/export",
