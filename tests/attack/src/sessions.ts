@@ -42,3 +42,19 @@ export function bff(s: BffSession, method: string, path: string, body?: unknown,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
+
+/**
+ * Break-glass in two steps, as a browser does it: the form POST (CSRF-checked) answers 303 and puts the justification in a short-lived cookie;
+ * the result page then does the audited read. Returns the page (or the POST answer when it did not redirect).
+ */
+export async function breakGlassRead(s: BffSession, id: string, justification: string, headers: Record<string, string> = {}) {
+  const post = await vault(`/actions/case-files/${id}/break-glass`, {
+    method: "POST",
+    jar: s.jar,
+    headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://vault.localhost", "sec-fetch-site": "same-origin", ...headers },
+    body: new URLSearchParams({ csrf: s.csrf, justification }).toString(),
+  });
+  if (post.status !== 303 || !post.location) return post;
+  const next = new URL(post.location);
+  return vault(next.pathname + next.search, { jar: s.jar });
+}

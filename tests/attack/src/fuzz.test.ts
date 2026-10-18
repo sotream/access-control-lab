@@ -5,7 +5,7 @@ import fc from "fast-check";
 import { beforeAll, describe, expect, it } from "vitest";
 import { api, FORM, form, vault } from "./http.js";
 import { oidcTokens, type Tokens } from "./kc.js";
-import { bff, session } from "./sessions.js";
+import { bff, breakGlassRead, session } from "./sessions.js";
 import type { BffSession } from "./kc.js";
 
 const SEED = process.env.FUZZ_SEED === "random" ? Math.floor(Math.random() * 2 ** 31) : Number(process.env.FUZZ_SEED ?? 20261018);
@@ -102,7 +102,7 @@ describe("A-93 the BFF: arbitrary JSON, forms and query strings", () => {
         shape(await vault("/bff/case-files", { method: "POST", jar: admin.jar, headers: { origin: "https://vault.localhost", "x-csrf-token": admin.csrf, "content-type": "application/json" }, body: JSON.stringify(v) ?? "null" }), "proxy create");
         shape(await vault("/actions/case-files/create", { method: "POST", jar: admin.jar, headers: { ...FORM, origin: "https://vault.localhost" }, body: form({ csrf: admin.csrf, title: x, body: y, classification: x, compartments: y }) }), "create form");
         shape(await vault(`/actions/case-files/${target}/update`, { method: "POST", jar: admin.jar, headers: { ...FORM, origin: "https://vault.localhost" }, body: form({ csrf: admin.csrf, title: x, body: y, version: x }) }), "update form");
-        shape(await vault(`/actions/case-files/${target}/break-glass`, { method: "POST", jar: admin.jar, headers: { ...FORM, origin: "https://vault.localhost" }, body: form({ csrf: admin.csrf, justification: y }) }), "break-glass form");
+        shape(await breakGlassRead(admin, target, y), "break-glass form");
         shape(await vault(`/cases?${new URLSearchParams({ m: x.toWellFormed(), e: y.toWellFormed() })}`, { jar: s.jar }), "page query");
         shape(await vault(`/audit?${new URLSearchParams({ actor: x.toWellFormed(), cursor: y.toWellFormed(), effect: x.toWellFormed(), limit: y.toWellFormed() })}`, { jar: auditor.jar }), "audit page query");
       }),

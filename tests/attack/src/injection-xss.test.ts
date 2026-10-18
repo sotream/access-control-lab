@@ -1,7 +1,7 @@
 // A-30..A-34: SQL injection (first and second order), stored and reflected XSS against the real CSP, through every string input a user controls.
 import { describe, expect, it } from "vitest";
 import { FORM, form, vault } from "./http.js";
-import { bff, session } from "./sessions.js";
+import { bff, breakGlassRead, session } from "./sessions.js";
 import { psql } from "./stack.js";
 
 const SQLI = ["'; DROP TABLE case_files; --", "' OR '1'='1", '" OR 1=1 --', "1; SELECT pg_sleep(5)", "\\'; DELETE FROM role_grants; --", "$$; DROP SCHEMA public CASCADE; --", "'||(SELECT version())||'", "x' UNION SELECT NULL,NULL,NULL--", "%27%20OR%201=1", "Robert'); DROP TABLE audit_log;--", "ʼ OR 1=1 --", "'; INSERT INTO role_grants VALUES ('analyst','approve',true,false,false); --"];
@@ -171,7 +171,7 @@ describe("A-34 stored XSS through the other places text ends up: a file name, a 
 
     const admin = await session("unit-admin-alpha");
     const conf = (await import("./fixtures.js")).fixtures().confAlphaA;
-    for (const j of ["<script>alert(1)</script>", '"><img src=x onerror=alert(1)>', "</td><script>alert(1)</script>"]) await vault(`/actions/case-files/${conf}/break-glass`, { method: "POST", jar: admin.jar, headers: { ...FORM, origin: "https://vault.localhost", "sec-fetch-site": "same-origin" }, body: form({ csrf: admin.csrf, justification: j }) });
+    for (const j of ["<script>alert(1)</script>", '"><img src=x onerror=alert(1)>', "</td><script>alert(1)</script>"]) await breakGlassRead(admin, conf, j);
     const auditor = await session("auditor");
     for (const path of ["/audit", "/audit?effect=allow", `/audit?resource=${conf}`]) {
       const r = await vault(path, { jar: auditor.jar });

@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "css": "node scripts/build-css.mjs",
+    "predev": "pnpm css",
     "dev": "next dev -H 127.0.0.1",
+    "prebuild": "pnpm css",
     "build": "next build",
     "start": "next start -H 127.0.0.1",
     "typecheck": "next typegen && tsc --noEmit",

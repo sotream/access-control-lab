@@ -1,0 +1,16 @@
+{
+  "name": "@acl/e2e-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "node ../../scripts/prod-like-setup.mjs && playwright test",
+    "screenshots": "node ../../scripts/prod-like-setup.mjs && SHOTS=1 playwright test src/screenshots.spec.ts"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "@types/node": "^26.6.5"
+  }
+}

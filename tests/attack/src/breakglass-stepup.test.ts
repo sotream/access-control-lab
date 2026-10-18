@@ -1,13 +1,12 @@
 // A-60..A-64: break-glass abuse and step-up bypass attempts.
 import { describe, expect, it } from "vitest";
-import { api, FORM, form, vault } from "./http.js";
+import { api } from "./http.js";
 import { fixtures } from "./fixtures.js";
 import { claimsOf, oidcTokens, bffLogin } from "./kc.js";
-import { bff, session } from "./sessions.js";
+import { bff, breakGlassRead, session } from "./sessions.js";
 import { psql, q } from "./stack.js";
 
-const same = { origin: "https://vault.localhost", "sec-fetch-site": "same-origin" };
-const breakGlass = (s: Awaited<ReturnType<typeof session>>, id: string, justification: string) => vault(`/actions/case-files/${id}/break-glass`, { method: "POST", jar: s.jar, headers: { ...FORM, ...same }, body: form({ csrf: s.csrf, justification }) });
+const breakGlass = (s: Awaited<ReturnType<typeof session>>, id: string, justification: string) => breakGlassRead(s, id, justification);
 const auditRows = (resource: string) => Number(psql(`SELECT count(*) FROM audit_log WHERE resource_id = ${q(resource)} AND details ? 'alert'`));
 
 describe("A-60 break-glass: who may use it, for what, and what it leaves behind", () => {

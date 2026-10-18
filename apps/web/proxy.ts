@@ -33,13 +33,14 @@ export function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname); // for the navigation highlight; set here, so a client-sent value never gets through
   requestHeaders.set("content-security-policy", csp);
 
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("content-security-policy", csp);
   res.headers.set("x-content-type-options", "nosniff");
   res.headers.set("x-frame-options", "DENY");
-  res.headers.set("referrer-policy", "no-referrer");
+  res.headers.set("referrer-policy", "same-origin"); // not no-referrer: Chromium then sends `Origin: null` on same-origin form posts and the CSRF check (rightly) refuses them; same-origin sends nothing to any other site
   res.headers.set("cross-origin-opener-policy", "same-origin");
   res.headers.set("cross-origin-resource-policy", "same-origin");
   res.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()");
