@@ -41,7 +41,6 @@ async function call(user: User, method: string, path: string, body?: unknown, he
 }
 const sub = (u: User) => decode(tokens.get(u)!.access_token).claims.sub as string;
 const dbRows = async (): Promise<AuditRow[]> => (await aud.query("SELECT * FROM audit_log ORDER BY id")).rows.map(rowFromDb);
-const lastRow = async () => (await dbRows()).at(-1)!;
 
 async function start(env: Record<string, string> = {}) {
   const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, MANAGED_ADDRESSES: "127.0.0.1", THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", AUDIT_CHECKPOINT_SECONDS: "0", ...env });

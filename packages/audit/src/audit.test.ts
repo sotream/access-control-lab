@@ -130,6 +130,7 @@ describe("sanitizeText", () => {
     const bidi = String.fromCodePoint(0x202e);
     const zw = String.fromCodePoint(0x200b);
     expect(sanitizeText(`  incident\n4711\t${bidi}x${zw}y  `)).toBe("incident 4711 x y");
+    expect(sanitizeText(`a${String.fromCodePoint(0)}b${String.fromCodePoint(1)}c${String.fromCodePoint(0x7f)}d`)).toBe("a b c d");
     expect(sanitizeText("a".repeat(600))).toBe("a".repeat(500));
     expect(sanitizeText("a".repeat(600), 10)).toBe("a".repeat(10));
     expect(sanitizeText(`a${String.fromCodePoint(0x1f600)}`)).toBe(`a${String.fromCodePoint(0x1f600)}`);
