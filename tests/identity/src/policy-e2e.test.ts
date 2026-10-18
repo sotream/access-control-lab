@@ -1,4 +1,5 @@
 // Guard + policy engine + in-memory fixture, driven by REAL Keycloak tokens of the seed users (T-11, T-15, T-16, T-17, T-25).
+import { parseZoneKeys, signZone } from "@acl/netguard";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../../apps/api/src/app.js";
 import { loadConfig } from "../../../apps/api/src/config.js";
@@ -18,11 +19,14 @@ let pwdOnlySecretA: Tokens; // SECRET user whose token says acr=pwd (client aske
 
 const NOON = Date.UTC(2026, 9, 17, 12, 0, 0);
 
+/** what the BFF would send: the managed zone, signed for the token's subject (the API accepts a zone from nobody else) */
+const zoneHeader = (accessToken: string) => ({ "x-acl-zone": signZone(parseZoneKeys(process.env.ZONE_SIGNING_KEYS!), "managed", JSON.parse(Buffer.from(accessToken.split(".")[1]!, "base64url").toString()).sub as string, Math.floor(Date.now() / 1000)) });
+
 async function call(user: User | "secretAPwd", method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const t = user === "secretAPwd" ? pwdOnlySecretA : tokens.get(user)!;
   const res = await fetch(`${url}${path}`, {
     method,
-    headers: { authorization: `Bearer ${t.access_token}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    headers: { authorization: `Bearer ${t.access_token}`, ...zoneHeader(t.access_token), ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -33,7 +37,7 @@ async function call(user: User | "secretAPwd", method: string, path: string, bod
 const sub = (u: User) => decode(tokens.get(u)!.access_token).claims.sub as string;
 
 beforeAll(async () => {
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", MANAGED_ADDRESSES: "127.0.0.1" });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", ZONE_SIGNING_KEYS: process.env.ZONE_SIGNING_KEYS! });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), extraControllers: FIXTURE.controllers, extraProviders: FIXTURE.providers, clock: () => NOON });
   await app.listen(0, "127.0.0.1");
   url = `http://127.0.0.1:${(app.getHttpServer().address() as { port: number }).port}`;

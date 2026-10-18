@@ -1,6 +1,6 @@
 // The `details` column is deliberately narrow: a fixed set of keys with fixed types. There is no place to put a token, a claim set or free text
 // other than the sanitised break-glass justification. The database repeats the key whitelist (audit_details_ok); keep both lists equal.
-export const DETAIL_KEYS = ["justification", "alert", "rule_ids", "authoritative", "event", "count", "format", "filters", "from_id", "to_id", "truncated", "acr", "detail_code"] as const;
+export const DETAIL_KEYS = ["justification", "alert", "rule_ids", "authoritative", "event", "count", "format", "filters", "from_id", "to_id", "truncated", "acr", "detail_code", "size", "sha256", "media", "scan"] as const;
 
 const TAG = /^[A-Za-z0-9_.:-]{1,64}$/;
 const FILTER_KEYS = ["from", "to", "actor", "resource", "action", "effect"];
@@ -43,6 +43,18 @@ export function validateDetails(d: unknown): Record<string, unknown> {
       case "acr":
       case "detail_code":
         if (!isStr(v, TAG)) throw new Error(`details.${k} must be a tag`);
+        break;
+      case "size":
+        if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 1_073_741_824) throw new Error("details.size must be a byte count");
+        break;
+      case "sha256":
+        if (!isStr(v, /^[0-9a-f]{64}$/)) throw new Error("details.sha256 must be 64 lowercase hex digits");
+        break;
+      case "media":
+        if (v !== "pdf" && v !== "png" && v !== "jpeg" && v !== "text") throw new Error("details.media must be pdf, png, jpeg or text");
+        break;
+      case "scan":
+        if (!isStr(v, TAG)) throw new Error("details.scan must be a tag");
         break;
       case "format":
         if (v !== "ndjson" && v !== "csv") throw new Error("details.format must be ndjson or csv");

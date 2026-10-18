@@ -31,6 +31,13 @@ afterAll(async () => {
   await app.end();
 });
 
+const ATTACH_SQL = "INSERT INTO attachments (case_file_id, display_name, media_type, size_bytes, sha256, storage_key, uploaded_by_id, status, scanned_at) VALUES ($1,'a.txt','text/plain',1,decode(repeat('00',32),'hex'),md5(random()::text || clock_timestamp()::text),'u1','clean',now())";
+/** one attachment per file, inserted as the superuser: what a subject sees of them must equal what the parent's read rule shows */
+async function seedAttachments(rs: readonly GridRow[]): Promise<void> {
+  await admin.query("DELETE FROM attachments");
+  for (const r of rs) await admin.query(ATTACH_SQL, [r.id]);
+}
+
 const ROLE_SETS = [["analyst"], ["reviewer"], ["unit-admin"], ["auditor"], ["platform-admin"], ["analyst", "reviewer"], ["ghost"]];
 
 function subjects(clearances: string[], comps: string[][], ids = ["u1", "u2"]): Subject[] {
@@ -69,6 +76,9 @@ describe("grid parity: every subject x env x row, per action", () => {
   });
 
   it.each(DB_ACTIONS.filter((a) => a !== "read"))("%s", async (action) => {
+    // a draft that has attachments cannot be deleted (foreign key): that is an intentional difference, so this grid runs without attachments
+    if (action === "delete") await admin.query("DELETE FROM attachments");
+    if (action === "attachments-read") await seedAttachments(rows);
     // the submitter only matters for approve (separation of duties); other actions use the rows without the u2 submitter variants
     const rs = action === "approve" ? rows : rows.filter((r) => r.submittedById !== "u2");
     expect(diff(await grid(action, subjects(["OFFICIAL", "SECRET"], [[], ["A", "B"]], ["u1"]), ENVS, rs))).toBe("");
@@ -106,9 +116,11 @@ describe("property parity: random subject, environment and row", () => {
     await fc.assert(
       fc.asyncProperty(subjectArb, envArb, fc.array(rowArb, { minLength: 1, maxLength: 4 }), async (s, e, rs) => {
         for (const r of rs) await insertRow(admin, r);
+        if (action === "attachments-read") await seedAttachments(rs);
         try {
           expect(diff(await compare(app, action, s, e, rs))).toBe("");
         } finally {
+          await admin.query("DELETE FROM attachments WHERE case_file_id = ANY($1::uuid[])", [rs.map((r) => r.id)]);
           await admin.query("DELETE FROM case_files WHERE id = ANY($1::uuid[])", [rs.map((r) => r.id)]);
         }
       }),

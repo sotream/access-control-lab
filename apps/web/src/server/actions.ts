@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { config } from "./config";
 import { ProxyRefused, type ApiResult } from "./api";
-import { requireCsrfSession } from "./guard";
+import { boundBody, requireCsrfSession } from "./guard";
 import type { Session } from "./session-store";
+
+/** ordinary forms are small: titles and bodies up to 50 000 characters (4 bytes each in the worst case) plus fields */
+export const MAX_FORM = 256 * 1024;
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Parses the form, checks session + CSRF, hands over. Refusals are JSON 401/403 (a browser form post that fails CSRF is not a user mistake). */
 export async function formAction(req: Request, run: (a: { session: Session; form: FormData }) => Promise<Response>): Promise<Response> {
+  const tooBig = boundBody(req, MAX_FORM);
+  if (tooBig) return tooBig;
   const form = await req.formData().catch(() => undefined);
   if (!form) return NextResponse.json({ error: "bad_form" }, { status: 400, headers: { "cache-control": "no-store" } });
   const r = await requireCsrfSession(req, (form.get("csrf") as string | null) ?? undefined);
