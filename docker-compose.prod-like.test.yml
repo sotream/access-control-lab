@@ -1,6 +1,35 @@
 # Test-only additions to the prod-like stack (scripts/prod-like-test.mjs): an echo upstream and a route to it, to observe what the proxy passes on.
 # Never part of a deployment: `docker compose -f docker-compose.prod-like.yml -f docker-compose.prod-like.test.yml up -d`
 services:
+  # the same API image and configuration with the rate limits lifted: the attack suite sends hundreds of forged tokens, and the real API (below, /__api-strict)
+  # correctly answers 429 after ten failures a minute. The limiter itself is attacked on the strict instance.
+  api-lax:
+    extends:
+      file: docker-compose.prod-like.yml
+      service: api
+    environment:
+      AUTH_FAIL_LIMIT: "10000"
+      THROTTLE_LIMIT: "100000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      clamd: { condition: service_healthy }
+  # the BFF with the rate limits lifted (the suite signs in dozens of times from one address, which the production limits correctly refuse) ...
+  web:
+    depends_on:
+      api-lax: { condition: service_healthy }
+    environment:
+      API_BASE_URL: http://api-lax:3001 # the API without rate limits behind the BFF without rate limits; web-strict talks to the real one
+      RATE_AUTH_PER_MINUTE: "10000"
+      RATE_USER_PER_MINUTE: "100000"
+      RATE_IP_PER_MINUTE: "100000"
+  # ... and one with the production limits, reached by sending the header `x-attack-instance: strict` (infra/caddy/test/strict.caddy), for the attacks on the limiter
+  web-strict:
+    extends:
+      file: docker-compose.prod-like.yml
+      service: web
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      api: { condition: service_healthy }
   caddy:
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro

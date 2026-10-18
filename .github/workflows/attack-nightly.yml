@@ -1,0 +1,48 @@
+name: attack-nightly
+
+on:
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzz_seed:
+        description: "fuzz seed (random when empty); copy it from a failed run to reproduce"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attack-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  attack-nightly:
+    # The attack suite with a random fuzz seed (300 runs per property) and the slow checks (a token is refused after its own expiry: a five minute wait).
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0 (version from packageManager)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate the stack's throw-away secrets and certificates
+        run: node scripts/prod-like-setup.mjs
+      - name: The attacks with a random fuzz seed and the slow checks
+        env:
+          FUZZ_SEED_INPUT: ${{ github.event.inputs.fuzz_seed }}
+        run: |
+          export FUZZ_SEED="${FUZZ_SEED_INPUT:-random}" FUZZ_RUNS=300 ATTACK_SLOW=1
+          NODE_EXTRA_CA_CERTS="$PWD/secrets-dev/prod-like/ca.crt" pnpm --filter @acl/attack-tests exec vitest run
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod-like.yml -f docker-compose.prod-like.test.yml logs --no-color --tail 60
+      - name: Stop stack
+        if: always()
+        run: docker compose -f docker-compose.prod-like.yml -f docker-compose.prod-like.test.yml down -v

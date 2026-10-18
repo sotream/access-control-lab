@@ -275,6 +275,15 @@ describe("break-glass (T-25)", () => {
     expect(alert).toMatchObject({ sub: "u-admin-beta", action: "read", resourceId: "conf-alpha-a", effect: "allow", reason: "ALLOWED_BREAK_GLASS", justification: "incident 4711" });
   });
 
+  it("a justification in any script travels percent-encoded and is logged as written; plain text with a literal % still works", async () => {
+    const r = await c("adminBeta", "GET", "/files/conf-alpha-a", undefined, { [BG]: encodeURIComponent("інцидент 4711 \u{1F600}") });
+    expect(r.status).toBe(200);
+    const alerts = api.logs.map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l.msg === "break_glass_alert");
+    expect(alerts.at(-1)).toMatchObject({ justification: "інцидент 4711 \u{1F600}" });
+    expect((await c("adminBeta", "GET", "/files/conf-alpha-a", undefined, { [BG]: "100% sure, incident 7" })).status).toBe(200); // not valid percent-encoding: used as it is
+    expect((await c("adminBeta", "GET", "/files/conf-alpha-a", undefined, { [BG]: encodeURIComponent("\u0007\u202e") })).status, "only control and bidi characters: blank after cleaning").toBe(404);
+  });
+
   it("empty justification: refused", async () => {
     expect((await c("adminBeta", "GET", "/files/official-alpha", undefined, { [BG]: " " })).status).toBe(403);
     expect((await c("adminBeta", "GET", "/files/conf-alpha-a", undefined, { [BG]: "" })).status).toBe(404);

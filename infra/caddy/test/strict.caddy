@@ -1,0 +1,7 @@
+# TEST ONLY: the BFF instance with the production rate limits, selected by a request header (the attack suite's limiter attacks).
+@strict header x-attack-instance strict
+handle @strict {
+	reverse_proxy web-strict:3000 {
+		import to_bff
+	}
+}

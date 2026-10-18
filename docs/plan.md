@@ -22,7 +22,7 @@ Case file vault. Users upload and read case files. Each file has a classificatio
 7. **Audit and integrity**: append-only audit log with hash chain, verification command, auditor-only read; export.
 8. **Hardening**: rate limiting, upload validation (type, size, malware scan hook), secret handling, dependency and image scanning, SBOM (software bill of materials), OWASP ASVS (Application Security Verification Standard) level 2 checklist mapped to tests.
 9. **Attack tests**: scripted abuse cases (token tampering, `alg=none`, wrong audience, expired token, IDOR (insecure direct object reference), privilege escalation, replayed refresh token) run in CI.
-10. **Frontend design** (last): Tailwind design pass on a working, secure UI.
+10. **Frontend design** (last): Tailwind design pass on a working, secure UI. **Not started: frontend design, to be discussed with the owner first.**
 
 ## Definition of done per stage
 
@@ -61,3 +61,9 @@ Carried forward to stage 8: key management for `AUDIT_HMAC_KEYS`, `SESSION_ENCRY
 
 Stage 8a delivered (PR "hardening, part 1"): `@acl/netguard` (rate limiter, trusted-proxy contract, signed network zone), per-user and per-address limits at the BFF and per-subject limits at the API, production profile (`ACL_ENV`) with secret checks and `*_FILE` secrets, rotation procedures, attachments (content inspection, quarantine, scanner hook, RLS following the parent, audit rows) with mutation results (docs/hardening.md, ADR-20 and ADR-21).
 Stage 8b (next PR): Dockerfiles, prod-like compose with a TLS proxy, image scanning, CI additions (dependency-review, CodeQL upload, Scorecard), `docs/asvs.md`.
+
+Stage 8b delivered: hardened images (api, web, keycloak, caddy, clamd), the prod-like stack with a TLS proxy and its attack test, Trivy on the built images, dependency-review, Scorecard, ASVS mapping (`docs/deployment.md`, `docs/asvs.md`, ADR-22/23).
+
+Stage 9 delivered: a black-box attack suite (`tests/attack`, 60 catalogued attacks, fuzzing, ZAP baseline) against the prod-like stack through its proxy, run in CI; a threat-coverage gate in `pnpm lint`; one place for accepted risks; mutation spot-check of the suite (`docs/attack-catalogue.md`, `docs/accepted-risks.md`, ADR-24). Five defects it found were fixed in the same PR.
+
+**Status: stages 1 to 9 are done. Stage 10 (frontend design) has not started and needs a design discussion with the owner.**

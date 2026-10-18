@@ -264,3 +264,30 @@ describe("redact()", () => {
     expect(() => JSON.stringify(redact(a))).not.toThrow();
   });
 });
+
+describe("prototype-pollution keys are refused like any unknown field (A-24)", () => {
+  it.each([
+    ["__proto__", '{"__proto__":{"status":"approved"}}'],
+    ["constructor", '{"constructor":{"prototype":{"status":"approved"}}}'],
+    ["prototype", '{"prototype":{"x":1}}'],
+    ["empty key", '{"":1}'],
+    ["toString", '{"toString":1}'],
+    ["hasOwnProperty", '{"title":"x","hasOwnProperty":null}'],
+    ["valueOf nested", '{"a":{"valueOf":{}}}'],
+    ["__defineGetter__", '{"__defineGetter__":0}'],
+    ["nested empty key", '{"a":[{"":{}}]}'],
+    ["nested", '{"a":{"b":[{"c":{"__proto__":{}}}]}}'],
+  ])("%s in a JSON body is a 400 before any handler runs", async (_n, body) => {
+    const a = await boot(jwks.url);
+    const r = await fetch(`${a.url}/me`, { method: "POST", headers: { ...bearer(token), "content-type": "application/json" }, body });
+    expect(r.status).toBe(400);
+    await a.close();
+  });
+  it("absurd nesting is refused, ordinary bodies pass the filter", async () => {
+    const deep = `${'{"a":'.repeat(40)}1${"}".repeat(40)}`;
+    const a = await boot(jwks.url);
+    expect((await fetch(`${a.url}/me`, { method: "POST", headers: { ...bearer(token), "content-type": "application/json" }, body: deep })).status).toBe(400);
+    expect((await fetch(`${a.url}/me`, { method: "POST", headers: { ...bearer(token), "content-type": "application/json" }, body: '{"title":"fine"}' })).status).toBe(404); // no POST /me: reaches routing
+    await a.close();
+  });
+});

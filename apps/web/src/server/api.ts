@@ -1,3 +1,4 @@
+import { sanitizeText } from "@acl/audit";
 import { signZone, parseZoneKeys } from "@acl/netguard";
 import { zoneOf, currentHeaders } from "./client";
 import { config } from "./config";
@@ -99,7 +100,7 @@ export async function apiFetch(session: Session, method: string, path: string, o
     const h = await currentHeaders();
     headers["x-acl-zone"] = signZone(parseZoneKeys(ring), h ? zoneOf(h) : "unmanaged", session.userSub, Math.floor(Date.now() / 1000));
   }
-  if (opts.breakGlass !== undefined) headers["x-break-glass-justification"] = opts.breakGlass.trim().slice(0, 500);
+  if (opts.breakGlass !== undefined) headers["x-break-glass-justification"] = encodeURIComponent(sanitizeText(opts.breakGlass, 500) ?? ""); // cleaned (control, bidi and invisible characters), then percent-encoded: a header is Latin-1 and a justification may be in any script (the API decodes); blank stays blank and is refused by the policy
 
   const res = await fetch(`${config().apiBase}${path}${qs.size ? `?${qs}` : ""}`, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
   if (res.status >= 300 && res.status < 400) throw new ProxyRefused(502);
