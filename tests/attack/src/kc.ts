@@ -1,6 +1,8 @@
 // Scripted browser and OIDC client for the prod-like stack: the BFF login flow as a user would do it, and a plain authorization-code exchange
 // (as the BFF itself does) to obtain real tokens that attacks can then tamper with, replay or misuse.
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { env } from "./stack.js";
 import { FORM, form, idp, Jar, vault, type Resp } from "./http.js";
 
@@ -28,13 +30,23 @@ function totp(secret: string, at: number, offsetSteps: number): string {
 }
 
 // Keycloak refuses a TOTP step it has already seen for the user: take the first unused step, wait for the clock when none is left.
-const lastStep = new Map<string, number>();
+// kept on disk: every test file is its own module instance and Keycloak counts steps per user across all of them
+const STEPS = new URL("../.cache/otp-steps.json", import.meta.url).pathname;
+const readSteps = (): Record<string, number> => {
+  try {
+    return JSON.parse(readFileSync(STEPS, "utf8")) as Record<string, number>;
+  } catch {
+    return {};
+  }
+};
 export async function nextOtp(user: string): Promise<string> {
   for (;;) {
+    const steps = readSteps();
     const now = Math.floor(Date.now() / 1000 / 30);
-    const step = Math.max(now, (lastStep.get(user) ?? 0) + 1);
+    const step = Math.max(now, (steps[user] ?? 0) + 1);
     if (step <= now + 1) {
-      lastStep.set(user, step);
+      mkdirSync(dirname(STEPS), { recursive: true });
+      writeFileSync(STEPS, JSON.stringify({ ...readSteps(), [user]: step }), { mode: 0o600 });
       return totp(TOTP_SECRET, Date.now(), step - now);
     }
     await new Promise((r) => setTimeout(r, 1000));
