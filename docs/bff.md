@@ -99,7 +99,7 @@ not forward `X-Forwarded-For` (the API ignores it anyway) because nothing in the
 | Content-Security-Policy | `default-src 'none'; script-src 'self' 'nonce-<per request>' 'strict-dynamic'; style-src 'self' 'nonce-<per request>'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'` (+ `upgrade-insecure-requests` with HSTS). No `unsafe-inline`, no `unsafe-eval` in production; no third-party origin |
 | Strict-Transport-Security | `max-age=31536000; includeSubDomains`, only when `HSTS_ENABLED` (default on for an https origin) |
 | Cross-Origin-Opener-Policy / Cross-Origin-Resource-Policy | `same-origin` / `same-origin` (static assets too) |
-| Referrer-Policy | `no-referrer` |
+| Referrer-Policy | `same-origin` (not `no-referrer`: a real browser then sends `Origin: null` on same-origin form posts and the CSRF check refuses them; nothing is sent to other sites either way) |
 | Permissions-Policy | camera, microphone, geolocation, payment, usb, interest-cohort all denied |
 | X-Content-Type-Options / X-Frame-Options | `nosniff` / `DENY` (also on static assets / legacy framing) |
 | Cache-Control | `no-store` on every dynamic response (Next's own stricter value on 404 pages) |
