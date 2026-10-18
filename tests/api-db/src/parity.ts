@@ -15,12 +15,15 @@ export const KNOWN_DIFFERENCES: readonly { id: string; what: string; coveredBy: 
   { id: "blank-break-glass", what: "a break-glass request with a blank justification is refused by the app before any query; the database never receives the flag", coveredBy: "packages/policy evaluate.test.ts; rls.test.ts (blank justification does not open rows)" },
   { id: "invalid-input", what: "unknown or malformed values (unknown clearance, missing fields) cannot exist in typed columns or are rejected as missing context", coveredBy: "roles.test.ts (no context, no rows); packages/policy malformed-input table" },
   { id: "no-table-actions", what: "readAudit and manageUsers have no table in this stage; they are role-only decisions in the app", coveredBy: "packages/policy role matrix; apps/api policy.test.ts" },
+  { id: "attachments-restrict-delete", what: "a case file that has attachments cannot be deleted (foreign key RESTRICT, 409): the policy allows the delete of an own draft, the database refuses while evidence hangs off it", coveredBy: "attachments-api.test.ts (draft with attachment: delete is 409 and nothing is lost)" },
   { id: "immutable-columns", what: "the database forbids changing classification, unit, compartments, author and id of an existing file; the policy has no reclassify action", coveredBy: "rls.test.ts (immutable columns)" },
   { id: "break-glass-non-read", what: "the database ignores the break-glass flag for writes (no policy mentions it); the policy ignores it for non-read actions too", coveredBy: "rls.test.ts" },
 ];
 
-export type DbAction = "read" | "create" | "update" | "submit" | "approve" | "delete";
-export const DB_ACTIONS: readonly DbAction[] = ["read", "create", "update", "submit", "approve", "delete"];
+export type DbAction = "read" | "create" | "update" | "submit" | "approve" | "delete" | "attach" | "attachments-read";
+export const DB_ACTIONS: readonly DbAction[] = ["read", "create", "update", "submit", "approve", "delete", "attach", "attachments-read"];
+/** attachments follow their parent: adding one is the parent's `update`, seeing one is the parent's `read` */
+const POLICY_ACTION = { attach: "update", "attachments-read": "read" } as const;
 
 export type GridRow = Required<Pick<Row, "id" | "classification" | "unit" | "compartments" | "status" | "authorId">> & { submittedById: string | null };
 
@@ -41,6 +44,10 @@ const UPD_APPROVE = sql`UPDATE case_files SET status = 'approved' WHERE id = $1`
 const DEL = sql`DELETE FROM case_files WHERE id = $1`;
 const INS = sql`INSERT INTO case_files (title, body, classification, unit, compartments, author_id, status) VALUES ('t', '', $1::classification, $2, $3::text[], $4, $5::case_status)`;
 
+const INS_ATTACH = sql`INSERT INTO attachments (case_file_id, display_name, media_type, size_bytes, sha256, storage_key, uploaded_by_id)
+  VALUES ($1, 'a.txt', 'text/plain', 1, decode(repeat('00', 32), 'hex'), md5(random()::text || clock_timestamp()::text), $2)`;
+const SELECT_ATTACHED = sql`SELECT DISTINCT case_file_id FROM attachments`;
+
 const DENIED_CODES = new Set(["42501", "23514"]); // insufficient_privilege (RLS, trigger), check_violation
 
 async function attempt(tx: Tx, stmt: ReturnType<typeof sql>, params: unknown[], expectRows: boolean): Promise<boolean> {
@@ -59,16 +66,22 @@ async function attempt(tx: Tx, stmt: ReturnType<typeof sql>, params: unknown[], 
 
 /** What the database lets this subject do, for every row, in one transaction per (subject, env, action). */
 export async function dbOutcomes(pool: pg.Pool, action: DbAction, subject: Subject, env: Environment, rows: readonly GridRow[]): Promise<Map<string, boolean>> {
-  return probe(pool, ctxOf(subject, env, action), async (tx) => {
+  return probe(pool, ctxOf(subject, env, action === "attachments-read" ? "read" : action), async (tx) => {
     const out = new Map<string, boolean>();
     if (action === "read") {
       const visible = new Set((await tx.query<{ id: string }>(SELECT_IDS)).rows.map((r) => r.id));
       for (const r of rows) out.set(r.id, visible.has(r.id));
       return out;
     }
+    if (action === "attachments-read") {
+      const visible = new Set((await tx.query<{ case_file_id: string }>(SELECT_ATTACHED)).rows.map((r) => r.case_file_id));
+      for (const r of rows) out.set(r.id, visible.has(r.id));
+      return out;
+    }
     for (const r of rows) {
       let ok: boolean;
       if (action === "create") ok = await attempt(tx, INS, [r.classification, r.unit, r.compartments, r.authorId, r.status], false);
+      else if (action === "attach") ok = await attempt(tx, INS_ATTACH, [r.id, subject.id], false);
       else if (action === "update") ok = await attempt(tx, UPD_TITLE, [r.id], false);
       else if (action === "submit") ok = await attempt(tx, UPD_SUBMIT, [r.id], false);
       else if (action === "approve") ok = await attempt(tx, UPD_APPROVE, [r.id], false);
@@ -97,7 +110,7 @@ export async function compare(pool: pg.Pool, action: DbAction, subject: Subject,
   const db = await dbOutcomes(pool, action, subject, env, rows);
   const bad: Mismatch[] = [];
   for (const r of rows) {
-    const d = evaluate(subject, action, asResource(r), env);
+    const d = evaluate(subject, POLICY_ACTION[action as keyof typeof POLICY_ACTION] ?? action, asResource(r), env);
     const policy = d.effect === "allow";
     if (db.get(r.id) !== policy) {
       bad.push({ action, subject: sShort(subject), env: eShort(env), row: short(r), db: db.get(r.id) as boolean, policy, policyReason: d.reason });

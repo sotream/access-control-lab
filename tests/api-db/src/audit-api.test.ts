@@ -1,4 +1,5 @@
 // The audit trail end to end with real Keycloak tokens: what is recorded, fail closed, the auditor's endpoints, exports, verification (T-24..T-26).
+import { parseZoneKeys, signZone } from "@acl/netguard";
 import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,10 +25,13 @@ const logs: string[] = [];
 let url = "";
 let close: () => Promise<void>;
 
+/** what the BFF would send: the managed zone, signed for the token's subject (the API accepts a zone from nobody else) */
+const zoneHeader = (accessToken: string) => ({ "x-acl-zone": signZone(parseZoneKeys(process.env.ZONE_SIGNING_KEYS!), "managed", JSON.parse(Buffer.from(accessToken.split(".")[1]!, "base64url").toString()).sub as string, Math.floor(Date.now() / 1000)) });
+
 async function call(user: User, method: string, path: string, body?: unknown, headers: Record<string, string> = {}, base = url) {
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { authorization: `Bearer ${tokens.get(user)!.access_token}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    headers: { authorization: `Bearer ${tokens.get(user)!.access_token}`, ...zoneHeader(tokens.get(user)!.access_token), ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -43,7 +47,7 @@ const sub = (u: User) => decode(tokens.get(u)!.access_token).claims.sub as strin
 const dbRows = async (): Promise<AuditRow[]> => (await aud.query("SELECT * FROM audit_log ORDER BY id")).rows.map(rowFromDb);
 
 async function start(env: Record<string, string> = {}) {
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, MANAGED_ADDRESSES: "127.0.0.1", THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", AUDIT_CHECKPOINT_SECONDS: "0", ...env });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, ZONE_SIGNING_KEYS: process.env.ZONE_SIGNING_KEYS!, THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", AUDIT_CHECKPOINT_SECONDS: "0", ...env });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), clock: () => Date.UTC(2026, 9, 17, 12, 0, 0) });
   await app.listen(0, "127.0.0.1");
   return { app, base: `http://127.0.0.1:${(app.getHttpServer().address() as { port: number }).port}` };

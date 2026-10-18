@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limited } from "../../../../src/server/limits";
 import { client, oidc, redirectUri } from "../../../../src/server/oidc";
 import { clearPreAuthCookie, preAuthCookie, sealPreAuth } from "../../../../src/server/preauth";
 import { safeAcr, safeReturnTo } from "../../../../src/server/redirect";
@@ -7,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 /** Starts Authorization Code + PKCE (S256). state, nonce and the verifier go into a short-lived encrypted httpOnly cookie. */
 export async function GET(req: NextRequest) {
+  const slow = await limited("auth");
+  if (slow) return slow;
   const cfg = await oidc();
   const returnTo = safeReturnTo(req.nextUrl.searchParams.get("returnTo"));
   const acr = safeAcr(req.nextUrl.searchParams.get("acr"));

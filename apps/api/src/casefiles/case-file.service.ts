@@ -93,6 +93,7 @@ export class CaseFileService {
         this.logger.event("error", "db_denied_after_policy_allowed", { reqId: c.reqId, sub: c.subject.id, action });
         throw new ForbiddenException();
       }
+      if (code === "23503") throw new ConflictException(); // a draft that still has attachments cannot be deleted
       if (code === "55P03" || code === "40001" || code === "40P01") throw new ConflictException(); // lock timeout, serialization, deadlock: retry
       if (code === "57014") throw new ServiceUnavailableException(); // statement timeout
       throw e;
@@ -157,6 +158,15 @@ export class CaseFileService {
       throw new ForbiddenException();
     }
     return row;
+  }
+
+  /**
+   * For features that hang off a case file (attachments): one transaction with the request context, the authoritative decision on the
+   * (locked, for writes) parent row, then `fn`. Refusals are audited like every other decision of this service.
+   */
+  guarded<T>(c: Caller, action: "read" | "update", id: string, fn: (tx: Tx, parent: CaseFileRow) => Promise<T>): Promise<T> {
+    const audits: AuditEntry[] = [];
+    return this.run(c, action, async (tx) => fn(tx, await this.decide(tx, c, action, id, action === "update", audits)), audits);
   }
 
   list(c: Caller): Promise<CaseFileView[]> {

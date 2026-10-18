@@ -139,7 +139,7 @@ describe("input limits and validation (T-13, T-27)", () => {
 });
 
 describe("rate limiting (T-22, T-27)", () => {
-  it("general limit returns 429 with Retry-After", async () => {
+  it("public routes: limit per client address, 429 with Retry-After", async () => {
     const a = await boot(jwks.url, { THROTTLE_LIMIT: "5" });
     const codes: number[] = [];
     for (let i = 0; i < 8; i++) codes.push((await get(a.url, "/health")).status);
@@ -162,6 +162,17 @@ describe("rate limiting (T-22, T-27)", () => {
   it("successful requests do not consume the failure budget", async () => {
     const a = await boot(jwks.url, { AUTH_FAIL_LIMIT: "3" });
     for (let i = 0; i < 20; i++) expect((await get(a.url, "/me", bearer(token))).status).toBe(200);
+    await a.close();
+  });
+
+  it("authenticated traffic is limited per subject, not per address: one noisy user does not starve another", async () => {
+    const a = await boot(jwks.url, { THROTTLE_LIMIT: "5" });
+    const other = await sign(goodClaims({ sub: "someone-else" }), key);
+    const codes: number[] = [];
+    for (let i = 0; i < 8; i++) codes.push((await get(a.url, "/me", bearer(token))).status);
+    expect(codes.slice(0, 5).every((c) => c === 200)).toBe(true);
+    expect(codes.slice(5)).toEqual([429, 429, 429]);
+    expect((await get(a.url, "/me", bearer(other))).status).toBe(200);
     await a.close();
   });
 

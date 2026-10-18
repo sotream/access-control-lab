@@ -81,7 +81,7 @@ export async function nextOtp(username: string): Promise<string> {
     if (step <= now + 1) {
       lastStep.set(username, step);
       mkdirSync(STEP_DIR, { recursive: true });
-      writeFileSync(STEP_FILE, JSON.stringify(Object.fromEntries(lastStep)));
+      writeFileSync(STEP_FILE, JSON.stringify(Object.fromEntries(lastStep)), { mode: 0o600 });
       return totp(TOTP_SECRET, Date.now(), step - now);
     }
     await new Promise((r) => setTimeout(r, 1000));

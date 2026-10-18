@@ -38,6 +38,7 @@ export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; ext
     maxAge: 600,
   });
   app.useBodyParser("json", { limit: cfg.bodyLimit });
+  app.useBodyParser("raw", { type: "application/octet-stream", limit: cfg.attachmentMaxBytes }); // attachments only: bytes, never parsed
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, forbidUnknownValues: true, transform: false }),
   );

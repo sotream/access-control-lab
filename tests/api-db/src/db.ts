@@ -97,7 +97,7 @@ export async function insertRow(admin: pg.Pool, r: Row): Promise<string> {
   return id;
 }
 
-export const clearRows = (admin: pg.Pool) => admin.query("TRUNCATE case_files");
+export const clearRows = (admin: pg.Pool) => admin.query("TRUNCATE attachments, case_files");
 
 export const MFA_ENV = { acr: "mfa", amr: ["pwd", "otp"] } as const;
 export const NOON = Date.UTC(2026, 9, 17, 12, 0, 0) / 1000;

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AuditUnavailable, auditAuth } from "../../../../src/server/audit";
 import { config } from "../../../../src/server/config";
+import { limited } from "../../../../src/server/limits";
 import { clearPreAuthCookie, openPreAuth } from "../../../../src/server/preauth";
 import { cookieAttrs, parseCookies, preAuthCookieName, sessionCookieName } from "../../../../src/server/cookies";
 import { sessionStore, tokenSetFrom } from "../../../../src/server/session";
@@ -21,6 +22,8 @@ const fail = async (status: number, reason: string) => {
  * any session the browser already had is destroyed). The pre-auth cookie is single use.
  */
 export async function GET(req: NextRequest) {
+  const slow = await limited("auth");
+  if (slow) return slow;
   const cookies = parseCookies(req.headers.get("cookie"));
   const pre = openPreAuth(cookies.get(preAuthCookieName()));
   if (!pre) return fail(400, "NO_PREAUTH");

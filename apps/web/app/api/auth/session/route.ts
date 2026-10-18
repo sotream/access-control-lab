@@ -1,4 +1,5 @@
 import { json } from "../../../../src/server/guard";
+import { limited } from "../../../../src/server/limits";
 import { sessionFromCookieHeader } from "../../../../src/server/session";
 
 export const dynamic = "force-dynamic";
@@ -7,5 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const s = await sessionFromCookieHeader(req.headers.get("cookie"));
   if (!s) return json(200, { authenticated: false });
+  const slow = await limited("user", s.userSub);
+  if (slow) return slow;
   return json(200, { authenticated: true, sub: s.userSub, expiresAt: s.expiresAt.toISOString(), csrfToken: s.csrfToken });
 }

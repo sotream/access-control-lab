@@ -12,6 +12,11 @@ import { ExistingCaseFileLoader, NewCaseFileLoader } from "./case-file.loaders.j
 import { CaseFilesController } from "./case-file.controller.js";
 import { DB_POOL } from "../db/tokens.js";
 import { CaseFileService } from "./case-file.service.js";
+import { AttachmentRepository } from "../db/attachment.repository.js";
+import { AttachmentsController } from "../attachments/attachment.controller.js";
+import { AttachmentService } from "../attachments/attachment.service.js";
+import { ClamdScanner, SCANNER, StubScanner } from "../attachments/scanner.js";
+import { AttachmentStore } from "../attachments/storage.js";
 
 @Injectable()
 class PoolLifecycle implements OnModuleDestroy {
@@ -26,7 +31,7 @@ export function dataLayer(cfg: AppConfig): { controllers: Type[]; providers: Pro
   if (!cfg.databaseUrl) return { controllers: [], providers: [] };
   const url = cfg.databaseUrl;
   return {
-    controllers: [CaseFilesController, AuditLogController],
+    controllers: [CaseFilesController, AttachmentsController, AuditLogController],
     providers: [
       {
         provide: DB_POOL,
@@ -43,6 +48,10 @@ export function dataLayer(cfg: AppConfig): { controllers: Type[]; providers: Pro
       CheckpointService,
       AuditLogService,
       CaseFileRepository,
+      AttachmentRepository,
+      AttachmentStore,
+      AttachmentService,
+      { provide: SCANNER, useClass: cfg.attachmentScanner === "clamd" ? ClamdScanner : StubScanner },
       CaseFileService,
       ExistingCaseFileLoader,
       NewCaseFileLoader,

@@ -58,3 +58,6 @@ and a decision on conveying the client network zone; stage 10 designs the UI (th
 
 Stage 7 delivered: HMAC-chained append-only audit log (decisions, break-glass, BFF authentication events, auditor reads/exports), database-enforced linearity, checkpoints, `audit:verify` and `audit:checkpoint`, auditor endpoints and page (docs/audit.md, ADR-17..19).
 Carried forward to stage 8: key management for `AUDIT_HMAC_KEYS`, `SESSION_ENCRYPTION_KEYS` and the DB passwords (secret store, rotation procedure), external anchoring of checkpoints (WORM or second system), retention/partitioning of the audit table, audit-write throughput measurement, rate limiting of login and the auditor endpoints, TLS between components.
+
+Stage 8a delivered (PR "hardening, part 1"): `@acl/netguard` (rate limiter, trusted-proxy contract, signed network zone), per-user and per-address limits at the BFF and per-subject limits at the API, production profile (`ACL_ENV`) with secret checks and `*_FILE` secrets, rotation procedures, attachments (content inspection, quarantine, scanner hook, RLS following the parent, audit rows) with mutation results (docs/hardening.md, ADR-20 and ADR-21).
+Stage 8b (next PR): Dockerfiles, prod-like compose with a TLS proxy, image scanning, CI additions (dependency-review, CodeQL upload, Scorecard), `docs/asvs.md`.

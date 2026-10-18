@@ -1,4 +1,5 @@
 // API + Postgres + real Keycloak tokens, end to end (T-11, T-13, T-14, T-15, T-16, T-17, T-25, T-29).
+import { parseZoneKeys, signZone } from "@acl/netguard";
 import { randomUUID } from "node:crypto";
 import { Controller, Get, Inject } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -46,11 +47,14 @@ let url = "";
 let close: () => Promise<void>;
 const ids: Record<string, string> = {};
 
+/** what the BFF would send: the managed zone, signed for the token's subject (the API accepts a zone from nobody else) */
+const zoneHeader = (accessToken: string) => ({ "x-acl-zone": signZone(parseZoneKeys(process.env.ZONE_SIGNING_KEYS!), "managed", JSON.parse(Buffer.from(accessToken.split(".")[1]!, "base64url").toString()).sub as string, Math.floor(Date.now() / 1000)) });
+
 async function call(user: User | "secretAPwd", method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const t = user === "secretAPwd" ? pwdOnlySecretA : tokens.get(user)!;
   const res = await fetch(`${url}${path}`, {
     method,
-    headers: { authorization: `Bearer ${t.access_token}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    headers: { authorization: `Bearer ${t.access_token}`, ...zoneHeader(t.access_token), ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -76,7 +80,7 @@ beforeAll(async () => {
   await mk("secret-a", { classification: "SECRET", compartments: ["A"] });
   await mk("secret-b", { classification: "SECRET", compartments: ["B"] });
 
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", MANAGED_ADDRESSES: "127.0.0.1" });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", ZONE_SIGNING_KEYS: process.env.ZONE_SIGNING_KEYS! });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), clock: () => NOON, extraControllers: [BuggyController] });
   await app.listen(0, "127.0.0.1");
   url = `http://127.0.0.1:${(app.getHttpServer().address() as { port: number }).port}`;

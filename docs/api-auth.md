@@ -7,7 +7,7 @@
 
 1. `requestContext`: server-generated request id (never taken from the client), JSON log line on finish without query string.
 2. helmet (deny-all CSP, nosniff, no-referrer, HSTS), CORS allow-list (`CORS_ORIGINS`, empty by default = no CORS headers), JSON body limit (`BODY_LIMIT`, 64kb).
-3. `ThrottlerGuard`: general limit per client address (`THROTTLE_LIMIT` per `THROTTLE_WINDOW_MS`).
+3. Rate limits (inside `AuthGuard`, from `@acl/netguard`): public routes per socket address, authenticated requests per verified subject (`THROTTLE_LIMIT` per `THROTTLE_WINDOW_MS`).
 4. `AuthGuard` (global): `@Public()` routes pass; everything else needs a valid token, then a declared access.
 5. `ValidationPipe` (whitelist, `forbidNonWhitelisted`, `forbidUnknownValues`, transform off).
 6. `ErrorFilter`: fixed bodies, no stack, no token or claim content.
@@ -64,7 +64,7 @@ tests assert that no token, signature, cookie or claim value reaches logs or res
 
 ## Rate limiting
 
-General throttle plus a failed-authentication budget (`AUTH_FAIL_LIMIT` per `AUTH_FAIL_WINDOW_MS`, default 10/min) keyed on the socket
+Per-subject throttle (the BFF carries every user over one socket address, so the address is no key for authenticated traffic; public routes use the address) plus a failed-authentication budget (`AUTH_FAIL_LIMIT` per `AUTH_FAIL_WINDOW_MS`, default 10/min) keyed on the socket
 address; `X-Forwarded-For` is not trusted (`trust proxy` off, tested). Over the budget even a valid token gets 429 until the window drains.
 Limits are in memory and per process (**ponytail**: shared store needed for several instances).
 

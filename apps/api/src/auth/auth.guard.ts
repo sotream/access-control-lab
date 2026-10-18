@@ -33,7 +33,11 @@ export class AuthGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<AppRequest>();
     const access = this.reflector.getAllAndOverride<Access | undefined>(ACCESS_KEY, [ctx.getHandler(), ctx.getClass()]);
-    if (access?.kind === "public") return true;
+    if (access?.kind === "public") {
+      const r = this.limiter.publicRoute(req.ip ?? "unknown");
+      if (!r.ok) throw new RateLimited(r.retryAfterSeconds);
+      return true;
+    }
 
     const key = req.ip ?? "unknown";
     if (this.limiter.blocked(key)) {
@@ -48,6 +52,13 @@ export class AuthGuard implements CanActivate {
       this.limiter.fail(key);
       req.authFailure = !presented ? "missing_token" : e instanceof AuthError ? e.reason : "internal";
       throw new AuthChallenge(presented);
+    }
+
+    // the BFF carries every user over one socket address: authenticated traffic is limited per verified subject
+    const spent = this.limiter.subject(req.principal.sub);
+    if (!spent.ok) {
+      req.authFailure = "rate_limited";
+      throw new RateLimited(spent.retryAfterSeconds);
     }
 
     // authenticated, but nothing declared what this route allows: deny (default deny)

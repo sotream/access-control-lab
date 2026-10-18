@@ -158,6 +158,13 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 - **Alternatives.** Audit row inside the business transaction (a rollback would erase the evidence of the attempt), asynchronous audit queue (an action could happen without a row), fail open (rejected).
 - **Consequences.** An allow row means "allowed", not "succeeded". An audit outage is an availability outage for case files, which is the intended trade.
 
+## ADR-20: Network zone is signed by the BFF, rate limits are per subject behind it
+
+- **Context.** The zone used to come from the socket address, which behind the BFF is always the BFF; the API-wide per-address throttle had the same flaw (all users share one address). Next.js route handlers also cannot see the socket.
+- **Decision.** The BFF decides the zone from a proxy-vouched client address (shared-secret header contract) and signs it per user and per call with an HMAC key ring; the API trusts only a verifying, fresh header for the token's subject. Authenticated API traffic is limited per verified subject, BFF traffic per user and per address, all with bounded in-memory tables.
+- **Alternatives.** Trust `X-Forwarded-For` from a configured peer (the BFF cannot see its peer), mTLS between proxy and BFF (heavier, kept as the upgrade path), accept the zone as a plain header from the BFF's token (`azp`) only (a user token with `azp=casefile-web` is only ever held by the BFF today, but the signature does not depend on that staying true), a shared store for counters (not needed yet).
+- **Consequences.** Two more secrets to manage and rotate; per-process counters; a compromised BFF can claim any zone for its users.
+
 ## ADR-19: A narrow SECURITY DEFINER function to log the true reason for a hidden file
 
 - **Context.** Row-level security makes a hidden file invisible to the API, so the API cannot evaluate the policy on it and would log "not found" for "clearance too low". The brief for the audit log is to keep the real reason internally while the client sees 404.
@@ -165,3 +172,10 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
   (parity test). This is the second SECURITY DEFINER function in the schema (the first is the audit chain trigger); the earlier "no SECURITY DEFINER" property of stage 5 is relaxed to "exactly these two", pinned by a test.
 - **Alternatives.** Log `RESOURCE_NOT_FOUND` for everything hidden (loses the information the log exists for), give the API a privileged metadata read (a bypass of RLS with data), run a second connection as a privileged role (same bypass, more moving parts).
 - **Consequences.** The API role can now ask "does this id exist and why can't I see it" in a form that returns no data; a bug or injection in the API could use it as an existence oracle (one bit, the same bit the audit log records). Documented and tested; the rules in SQL are a third copy of the read rule, covered by the same parity discipline.
+
+## ADR-21: Attachments on a plain filesystem volume, bytes decide the type, row security follows the parent
+
+- **Context.** The plan asks for uploads with type, size and malware-scan controls. File content is untrusted, names are attacker-controlled, and a download is the easiest way to run active content in the application's origin.
+- **Decision.** Store bytes on a dedicated directory under random keys (MinIO or another object store is not justified for a handful of small files and would add a service, credentials and a network hop). Decide the type from the bytes against a four-type allow-list and require the declared type to agree; refuse archives so there is nothing to decompress. Keep metadata in Postgres with row-level security that asks `case_files` (the parent's own policy), a scanner interface whose only success is an explicit clean verdict, quarantine/pending states that can never be served, and downloads as attachment with nosniff and a sandbox CSP, through the API only, audit row first.
+- **Alternatives.** Trust the declared type or extension (the classic bypass), sniff only the first bytes (polyglots), MinIO with presigned URLs (bearer URLs that outlive a revoked session and bypass the policy), serve inline with a sanitiser (a sanitiser is a second product to trust), copy the parent's rule into the attachments policy (drift: parity tests would have to chase two copies).
+- **Consequences.** A draft with attachments cannot be deleted and attachments cannot be removed; no quota and no re-scan job yet; the PDF scan is best effort; text files with markup markers are refused; the dev stub scanner means development proves the plumbing, not the detection.

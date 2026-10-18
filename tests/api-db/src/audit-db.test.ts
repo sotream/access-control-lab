@@ -308,7 +308,7 @@ describe("the SECURITY DEFINER functions: exactly two, each pinned and narrow", 
   });
 
   it("it returns only reason codes and agrees with packages/policy on a grid (parity)", async () => {
-    await admin.query("TRUNCATE case_files");
+    await admin.query("TRUNCATE attachments, case_files");
     const files: { id: string; classification: string; compartments: string[] }[] = [];
     for (const classification of ["OFFICIAL", "CONFIDENTIAL", "SECRET"])
       for (const compartments of [[], ["A"], ["A", "B"]]) {
@@ -334,7 +334,7 @@ describe("the SECURITY DEFINER functions: exactly two, each pinned and narrow", 
             });
           }
     expect([...codes].sort()).toEqual(["ALLOWED", "CLEARANCE_TOO_LOW", "COMPARTMENT_MISSING", "ROLE_NOT_PERMITTED", "STEP_UP_REQUIRED"]);
-    await admin.query("TRUNCATE case_files");
+    await admin.query("TRUNCATE attachments, case_files");
   });
 
   it("nobody can call it directly", async () => {
