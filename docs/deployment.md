@@ -9,6 +9,8 @@ How the system is meant to run when it is not a developer laptop, and the test t
 | `Dockerfile.api` | build `node:24-slim`, run `gcr.io/distroless/nodejs24-debian13:nonroot` | `pnpm deploy --prod`: production dependencies only, no shell, no package manager, no curl; user 65532; `ACL_ENV=production` baked in |
 | `Dockerfile.web` | same | Next.js production server; `ACL_ENV=production` baked in; Turbopack's hashed `pg` external is re-linked for the deployed layout (without it the BFF cannot load `pg`, the stack test catches that) |
 | `Dockerfile.keycloak` | Keycloak 26.8.1 | `kc.sh build` at image build time, so the container runs `start --optimized` with a read-only root filesystem |
+| `Dockerfile.caddy` | build `golang:1.26-alpine`, run `alpine:3.23` | Caddy 2.11.7 built from source with a current Go toolchain and `golang.org/x/net` v0.60.0, standard modules only. The stock `caddy:2-alpine` image carried 3 fixable HIGH findings (Go standard library, x/net) on 2026-10-18 |
+| `Dockerfile.clamd` | `alpine:3.23` | the Alpine `clamav` package (1.4.4) with signatures downloaded and verified by `freshclam` at build time. The stock `clamav/clamav:1.5.1` image carried 26 fixable HIGH/CRITICAL findings (old Alpine libraries) and exists for amd64 only |
 
 Digests were read with `docker buildx imagetools inspect` on 2026-10-18 and are bumped by Dependabot's docker ecosystem. pnpm is installed by corepack from `packageManager` (version only, no integrity hash pinned there: unverified). The web image is large (about 860 MB) because it carries the production `node_modules` of Next.js.
 
@@ -23,9 +25,9 @@ Digests were read with `docker buildx imagetools inspect` on 2026-10-18 and are 
  networks:  edge (routable, only caddy)   app, data, scan: internal (no way out)
 ```
 
-- **Proxy** (`infra/caddy/Caddyfile`, caddy pinned by digest, runs as 65532): the only published port, `127.0.0.1:443`. TLS ends here, HSTS, no `Server`, `Via`, `Alt-Svc` (HTTP/3 off, UDP is not published). For the BFF it **sets** `x-acl-proxy-secret` (read from a mounted file) and `x-acl-client-ip` (its own view of the client) and `X-Forwarded-For`/`-Proto`, and **removes** inbound `x-acl-zone`, `x-real-ip`, `Forwarded`, `X-Forwarded-Host`, `X-Forwarded-Port`. `set` replaces any client-supplied value, including duplicates. Request bodies are capped at 6 MB. For the identity provider only `/realms/casefile/*`, `/resources/*` and `/robots.txt` are served; the admin console, the master realm, `/health` and `/metrics` answer 404.
+- **Proxy** (`infra/caddy/Caddyfile`, `Dockerfile.caddy`, runs as 65532 with the unprivileged-port floor lowered by a container sysctl, so no capability is added back): the only published port, `127.0.0.1:443`. TLS ends here, HSTS, no `Server`, `Via`, `Alt-Svc` (HTTP/3 off, UDP is not published). For the BFF it **sets** `x-acl-proxy-secret` (read from a mounted file) and `x-acl-client-ip` (its own view of the client) and `X-Forwarded-For`/`-Proto`, and **removes** inbound `x-acl-zone`, `x-real-ip`, `Forwarded`, `X-Forwarded-Host`, `X-Forwarded-Port`. `set` replaces any client-supplied value, including duplicates. Request bodies are capped at 6 MB. For the identity provider only `/realms/casefile/*`, `/resources/*` and `/robots.txt` are served; the admin console, the master realm, `/health` and `/metrics` answer 404.
 - **Networks:** `app`, `data` and `scan` are `internal: true`: a container on them cannot reach the internet and nothing outside can reach it. `web` and `api` publish nothing. The BFF and the API reach the identity provider by its public name through the proxy (a network alias), trusting the stack's CA through `NODE_EXTRA_CA_CERTS`, so the token issuer is the same string everywhere.
-- **Every container:** `cap_drop: ALL`, `no-new-privileges`, read-only root filesystem (tmpfs for scratch, named volumes for data), memory, CPU and pids limits, `init`. No process runs as root: api and web as 65532, postgres as 70, clamd as 100, Keycloak as its own user, the proxy as 65532. The one capability added back is `NET_BIND_SERVICE` for the proxy (it listens on 443 and its binary carries the file capability). Keycloak and Postgres run as non-root without any added capability.
+- **Every container:** `cap_drop: ALL`, `no-new-privileges`, read-only root filesystem (tmpfs for scratch, named volumes for data), memory, CPU and pids limits, `init`. No process runs as root: api and web as 65532, postgres as 70, clamd as 100, Keycloak as its own user, the proxy as 65532. No container gets a capability back. Keycloak, Postgres and ClamAV run as non-root directly (`user:`), not by dropping privileges at start; the proxy binds 443 through the `net.ipv4.ip_unprivileged_port_start=0` sysctl of its own network namespace.
 - **Secrets:** one file each under `secrets-dev/prod-like/` (git-ignored), mounted by compose `secrets:` and read with `NAME_FILE`. Two services take credentials from an env file only because their images have no file option: Postgres (init script role passwords) and Keycloak (database and bootstrap-admin passwords, realm placeholders). The migration job gets `MIGRATOR_DATABASE_URL` the same way; no running service holds the schema owner's credential. The test asserts that no secret value of the application services shows up in `docker inspect`.
 - **Migrations:** a one-shot `migrate` service, then `api` and `web` start.
 - **Scanner:** `clamd` (`Dockerfile.clamd`: current Alpine plus the Alpine clamav package, native on amd64 and arm64) on its own internal network, reachable by the API only. Signatures are downloaded and verified by `freshclam` at **image build time** and baked in (the network is internal, the running container cannot update). Refreshing them means rebuilding the image (`SIGNATURES_DATE=$(date +%F) docker compose ... build clamd`); a scheduled rebuild or an update job with its own egress is the deployment's to build.
@@ -39,7 +41,7 @@ Needs docker and openssl; first run builds the images (a few minutes), a later r
 | Check | What it proves |
 |-------|----------------|
 | services healthy | the stack comes up from a cold start with migrations applied |
-| containers | non-root processes, read-only root, caps dropped (only the listed ones back), no-new-privileges, limits |
+| containers | non-root processes, read-only root, all capabilities dropped and none added back, no-new-privileges, limits |
 | networks | internal flags, only the proxy publishes a port, on loopback |
 | not via the proxy | the host cannot connect to 3000, 3001, 5432, 8080, 9000, 3310, 80; a container on the edge network cannot reach web, api, postgres, keycloak or clamd |
 | no way out | a container on app, data or scan cannot reach the internet |
@@ -52,5 +54,23 @@ Needs docker and openssl; first run builds the images (a few minutes), a later r
 | real scanner | clamd flags the EICAR test file and passes a clean file (client from the API image) |
 | end to end | real Keycloak login through the proxy, case file created, clean file stored and downloaded with attachment headers, EICAR quarantined and never served, database and volume agree |
 | rate limit | forged client addresses through the real proxy share the real bucket (429) |
+
+## CI (`.github/workflows`)
+
+| Workflow / job | What | Required check today |
+|----------------|------|----------------------|
+| `ci` / `check`, `identity`, `secret-scan` | unchanged | yes |
+| `ci` / `prod-like` | `node scripts/prod-like-test.mjs`: builds seven images, runs the stack, attacks it (about 10 to 15 minutes) | **no, proposed** |
+| `security` / `codeql` | CodeQL security-extended; results now **uploaded to code scanning** (public repo) and kept as an artifact; any finding still fails the job | yes |
+| `security` / `osv`, `workflows` | unchanged | yes |
+| `security` / `images` | builds api, web, keycloak, caddy, clamd; Trivy (HIGH/CRITICAL, fix available, `.trivyignore.yaml`) on those five and on the compose-pinned Keycloak and Postgres images; one CycloneDX SBOM per built image as the artifact `sbom-images` | yes (name unchanged, scope widened) |
+| `dependency-review` / `dependency-review` | `actions/dependency-review-action` on pull requests, fails on HIGH or worse | **no, proposed** |
+| `scorecard` / `scorecard` | OpenSSF Scorecard on main and weekly, published and uploaded to code scanning (v2.4.4; v2.5.0 was under a week old, release-age policy) | **no, proposed** (not meaningful as a PR gate) |
+
+Every action is pinned by commit SHA (checked with `gh api`; the dependency-review and scorecard SHAs are those of tags v5.0.0 and v2.4.4, **not yet exercised in a run until this PR's CI**). `permissions:` are minimal per job; actionlint and zizmor stay green.
+
+**Trivy exceptions** live in `.trivyignore.yaml`, each with a statement and an `expired_at` at most 90 days ahead; `scripts/check-trivyignore.mjs` (in `pnpm lint`) fails on a missing reason, a past expiry or a far one. The file is empty today. The existing `skip-files: usr/local/bin/gosu` for the Postgres image (`docs/supply-chain.md`) is the one standing exception and is not in the ignore file because it is a path, not an advisory.
+
+**Playwright smoke: skipped.** The pages are unstyled on purpose until stage 10; every flow (login with a real Keycloak, forms, CSRF, uploads, downloads, headers) is already exercised over HTTP against the production build, in CI, in the `identity` job and in `prod-like`. A browser would add one thing: real CSP and `__Host-` cookie enforcement, which is worth having once there is a UI to break. The browser download and a cold start would also not fit the 3 minute budget with the Docker stack up. Revisit in stage 10.
 
 **Not verified here:** a certificate from a public CA, HTTP/3, the behaviour behind a cloud load balancer that adds its own `X-Forwarded-For` (the proxy would need `trusted_proxies` and the BFF contract reviewed), more than one replica (limits are per process), Keycloak or Postgres tuning, backups, log shipping, host hardening, time synchronisation, clamd signature freshness, and the realm secrets of a real deployment. The size of the web image is a property of Next.js's production dependencies, not a finding.

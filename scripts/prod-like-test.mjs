@@ -7,7 +7,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import https from "node:https";
 import net from "node:net";
-import { createHmac } from "node:crypto";
 import { join } from "node:path";
 
 const root = new URL("../", import.meta.url).pathname;
