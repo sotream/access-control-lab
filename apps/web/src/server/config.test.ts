@@ -105,3 +105,52 @@ describe("esc", () => {
     expect(esc(5)).toBe("5");
   });
 });
+
+describe("web production profile (ACL_ENV=production)", () => {
+  const key = (seed: number) => Buffer.from(Array.from({ length: 32 }, (_, i) => (i * seed + 11) % 251)).toString("base64");
+  const good = {
+    ACL_ENV: "production",
+    WEB_ORIGIN: "https://vault.example",
+    KEYCLOAK_ISSUER: "https://id.example/realms/casefile",
+    API_BASE_URL: "https://api.example",
+    WEB_DATABASE_URL: "postgres://casefile_web:q9Xv2LmT8sWk4RzP7nYd@db.internal:5432/acl",
+    CASEFILE_WEB_SECRET: "q9Xv2LmT8sWk4RzP7nYd3HfJ6bCa1UeG",
+    SESSION_ENCRYPTION_KEYS: `session-2026:${key(29)}`,
+    AUDIT_HMAC_KEYS: `audit-2026:${key(37)}`,
+    ZONE_SIGNING_KEYS: `zone-2026:${key(41)}`,
+    TRUSTED_PROXY_SECRET: "Zr7Qm2Vx9LpT4WcN8YdHs6KbJ3GfUaE5",
+  };
+  it("accepts a complete, strong configuration", () => {
+    const c = loadWebConfig(good);
+    expect(c.profile).toBe("production");
+    expect(c.cookieSecure).toBe(true);
+    expect(c.hsts).toBe(true);
+  });
+  it.each([
+    ["typo in the profile", { ACL_ENV: "prod" }],
+    ["no proxy secret", { TRUSTED_PROXY_SECRET: undefined }],
+    ["no zone keys", { ZONE_SIGNING_KEYS: undefined }],
+    ["dev proxy secret", { TRUSTED_PROXY_SECRET: "dev-only-proxy-secret-0123456789abcdef" }],
+    ["dev client secret", { CASEFILE_WEB_SECRET: "dev-only-casefile-web-secret-0123456789" }],
+    ["short client secret", { CASEFILE_WEB_SECRET: "s" }],
+    ["dev session keys", { SESSION_ENCRYPTION_KEYS: "dev-1:ZGV2LW9ubHktc2Vzc2lvbi1rZXktMDEyMzQ1Njc4OWE=" }],
+    ["dev database password", { WEB_DATABASE_URL: "postgres://casefile_web:dev-only-casefile-web-password@db:5432/acl" }],
+    ["plain-http loopback origin", { WEB_ORIGIN: "http://127.0.0.1:3000" }],
+    ["plain-http loopback issuer", { KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile" }],
+    ["plain-http api off the private-network flag", { API_BASE_URL: "http://api:3001" }],
+    ["insecure cookies", { COOKIE_SECURE: "false" }],
+  ])("refuses %s", (_n, over) => expect(() => loadWebConfig({ ...good, ...over })).toThrow());
+  it("plain http to the API only with the explicit private-network flag", () => {
+    expect(loadWebConfig({ ...good, API_BASE_URL: "http://api:3001", API_INTERNAL_HTTP: "true" }).apiBase).toBe("http://api:3001");
+  });
+  it("error messages never carry a secret value", () => {
+    const canary = "CANARY-SECRET-VALUE-8812";
+    for (const over of [{ CASEFILE_WEB_SECRET: canary }, { TRUSTED_PROXY_SECRET: canary }, { WEB_DATABASE_URL: `postgres://u:${canary}@h/db` }]) {
+      try {
+        loadWebConfig({ ...good, ...over });
+      } catch (e) {
+        expect(String((e as Error).message)).not.toContain(canary);
+      }
+    }
+  });
+});

@@ -47,3 +47,50 @@ Tested: `packages/netguard` (forgery, wrong subject, flipped zone, stale, future
 **Not verified in dev:** a real reverse proxy that strips and sets the two headers (the prod-like compose in section 5 does it, tested only to the extent stated there); the deployment's own network topology (that nothing but the proxy can reach the BFF port); a compromised BFF can sign any zone for any user it holds a token for, which is inherent in trusting the BFF.
 
 Key rotation: add the new key first in both the BFF and the API rings (`new:...,old:...` on the verifier, `new` first on the signer), then drop `old` after 30 seconds plus a deploy cycle.
+
+## 3. Secrets and configuration (T-23, T-29)
+
+One validated configuration module per app (`apps/api/src/config.ts`, `apps/web/src/server/config.ts`). A bad value stops the start; nothing falls back to a weaker default.
+
+**Profile.** `ACL_ENV=production` switches on the production rules; a value other than `production` or `development` (a typo such as `prod`) is an error. `NODE_ENV` is not used as the switch: `next start` sets `NODE_ENV=production` for every deployment, including the CI tests that run on development secrets. Decision for the orchestrator: if `NODE_ENV=production` should also imply the profile, the CI test servers need real secrets.
+
+In production the API and the BFF refuse to start when:
+
+- a secret is missing (API: database URL, audit and zone key rings; BFF: client secret, database URL, session, audit and zone key rings, proxy secret);
+- a key in any ring is shorter than 32 bytes, is a repeated byte or has fewer than 12 distinct bytes, decodes to text containing a development marker, or has an id starting with `dev-`;
+- a secret string is shorter than 32 bytes, has fewer than 10 distinct characters or contains a development marker (`dev-only`, `changeme`, `example`, `password`);
+- a database password is shorter than 16 characters or contains a development marker;
+- the issuer, the origin or the API URL is plain http (loopback is not an exception in production; the API URL may be plain http on a private network only with `API_INTERNAL_HTTP=true`, an accepted trade-off because TLS between the BFF and the API is not built), or cookies are not `Secure`.
+
+Error messages name the variable and the rule, never the value (tested with canary values in `config.test.ts` of both apps).
+
+**Secrets as files.** `NAME_FILE=/path` replaces `NAME` for the listed secrets (container secrets keep values out of the process environment and `docker inspect`). Both forms at once, an unreadable file and an empty file are errors.
+
+**No secrets in logs.** Structured logs carry ids, reasons and codes only. `tests/bff/src/hardening-bff.test.ts` runs a live BFF and API through sign-in, a CSRF refusal, a failed callback, forged proxy headers and rate limiting, then scans every log line for every configured secret value (base64 and decoded forms), the database passwords, the proxy secret and the session cookie.
+
+**What to inject, from where (stance, not a vault).** Production secrets come from the platform's secret store (Docker/Kubernetes secrets or a sealed file store such as SOPS with age keys), mounted as files and read with `NAME_FILE`. Generate keys with `openssl rand -base64 32`, passwords with at least 24 random characters. Nothing goes into the image, the compose file, the repository or CI logs. Least privilege per component:
+
+| Secret | API | BFF | Verifier CLI | Proxy |
+|--------|-----|-----|--------------|-------|
+| `DATABASE_URL` (casefile_app) | yes | | | |
+| `WEB_DATABASE_URL` (casefile_web) | | yes | | |
+| `AUDIT_DATABASE_URL` (casefile_audit) | | | yes | |
+| `AUDIT_HMAC_KEYS` | yes | yes | yes | |
+| `ZONE_SIGNING_KEYS` | yes | yes | | |
+| `SESSION_ENCRYPTION_KEYS` | | yes | | |
+| `CASEFILE_WEB_SECRET` (OIDC client secret) | | yes | | |
+| `TRUSTED_PROXY_SECRET` | | yes | | yes |
+
+The migrator and admin database URLs are used by deployment jobs only and never mounted into a running service.
+
+### Rotation procedures
+
+| Secret | Procedure | Verified |
+|--------|-----------|----------|
+| Session key ring (`SESSION_ENCRYPTION_KEYS`) | Put the new key first, keep the old ones: new sessions and every token refresh seal with the new key, all keys still open old rows. Remove the old key after `SESSION_ABSOLUTE_SECONDS` (default 8 h). Removing it earlier makes the sessions sealed with it unreadable: those users sign in again. The pre-auth cookie is sealed with the same ring (minutes of lifetime). | unit test (`crypto.test.ts`), procedure not exercised live |
+| Cookie signing | There is none: the session cookie is a random 256-bit id stored hashed, the pre-auth cookie is AES-GCM under the session ring. Nothing to rotate beyond the session ring. | by construction |
+| Audit HMAC ring (`AUDIT_HMAC_KEYS`) | Put the new key first on the API and the BFF, keep every old key for as long as rows signed with it exist: the verifier needs them (`docs/audit.md`). Never delete a key id that is on a row. Archive retired keys with the audit data. | unit and CLI tests |
+| Zone ring (`ZONE_SIGNING_KEYS`) | Add the new key to the API ring first (verifies both), then make it first in the BFF ring, then drop the old key from the API after 30 seconds plus a deploy cycle. | unit test (`netguard`) |
+| Proxy secret | Change it on the proxy and the BFF together. Until both are changed, requests count as `direct` (shared rate-limit bucket, unmanaged zone): stricter, not weaker. | `hardening-bff.test.ts` (wrong secret) |
+| Database passwords | `ALTER ROLE ... PASSWORD`, update the secret, restart the service (pools reconnect). | not exercised |
+| OIDC client secret | Set a new secret on the Keycloak client, update `CASEFILE_WEB_SECRET`, restart the BFF. Keycloak's secret-rotation policy allows an overlap window. | **unverified** (Keycloak behaviour not tested here) |

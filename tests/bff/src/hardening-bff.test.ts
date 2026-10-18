@@ -1,7 +1,7 @@
 // Stage 8 at the BFF: rate limits, trusted-proxy contract and the signed network zone (T-22, T-27, T-44, T-45).
 import { afterAll, describe, expect, it } from "vitest";
 import { parseZoneKeys, verifyZone } from "@acl/netguard";
-import { Browser, PROXY_SECRET, startStubApi, startWeb, viaProxy, WEB, type Seen, type WebServer } from "./harness.js";
+import { Browser, PROXY_SECRET, startApi, startStubApi, startWeb, viaProxy, WEB, type Seen, type WebServer } from "./harness.js";
 
 const RING = process.env.ZONE_SIGNING_KEYS!;
 let web: WebServer | undefined;
@@ -102,5 +102,44 @@ describe("rate limits (T-22, T-27)", () => {
     // state-changing routes are limited too, after the session check and before the CSRF check does any work
     const post = await a.req("/actions/case-files/create", { method: "POST", headers: { origin: WEB, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ csrf: "x" }) });
     expect(post.status).toBe(429);
+  });
+});
+
+describe("secrets never reach the logs (canary scan over a live run)", () => {
+  it("web and API logs contain none of the configured secret values after logins, refusals, forged headers and rate limiting", async () => {
+    await web?.stop();
+    const api = await startApi();
+    try {
+      web = await startWeb({ RATE_AUTH_PER_MINUTE: "10000" });
+      const b = new Browser();
+      await b.login("analyst-official");
+      const csrf = /name="csrf" value="([^"]+)"/.exec((await b.req("/cases/new")).text)![1]!;
+      await b.req("/bff/me", { headers: { ...viaProxy("10.1.2.3"), "x-acl-zone": "managed" } });
+      await b.req("/actions/case-files/create", { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ csrf }) });
+      await b.req("/api/auth/callback?code=bad&state=bad");
+      await new Browser().req("/bff/case-files");
+      await fetch(`${WEB}/api/auth/login`, { headers: { "x-acl-proxy-secret": "wrong" }, redirect: "manual" });
+
+      const secrets = new Set<string>();
+      for (const n of ["SESSION_ENCRYPTION_KEYS", "AUDIT_HMAC_KEYS", "ZONE_SIGNING_KEYS"]) {
+        for (const part of process.env[n]!.split(",")) {
+          const raw = part.slice(part.indexOf(":") + 1);
+          secrets.add(raw);
+          secrets.add(Buffer.from(raw, "base64").toString("utf8"));
+        }
+      }
+      secrets.add(PROXY_SECRET);
+      secrets.add(process.env.CASEFILE_WEB_SECRET!);
+      for (const n of ["WEB_DATABASE_URL", "DATABASE_URL", "AUDIT_DATABASE_URL"]) secrets.add(decodeURIComponent(new URL(process.env[n]!).password));
+      const dump = [...web.logs, ...api.logs].join("\n");
+      expect(dump.length).toBeGreaterThan(0);
+      for (const v of secrets) if (v.length >= 8) expect(dump, `a configured secret appears in the logs (${v.length} chars)`).not.toContain(v);
+      // nor the session cookie value, the access token or the refresh token
+      const sid = b.cookie("casefile_session");
+      expect(sid).toBeTruthy();
+      expect(dump).not.toContain(sid!);
+    } finally {
+      await api.stop();
+    }
   });
 });

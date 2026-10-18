@@ -1,8 +1,13 @@
 // All runtime configuration, parsed once and validated. Fails closed: a bad value stops startup.
-import { parseZoneKeys } from "@acl/netguard";
+import { assertStrongDbUrl, assertStrongKeyRing, parseZoneKeys, profileOf, resolveSecretFiles } from "@acl/netguard";
 export const CONFIG = Symbol("CONFIG");
 
+/** secrets that may be given as `NAME_FILE=/path` (container secrets) instead of `NAME` */
+export const SECRET_ENV = ["DATABASE_URL", "AUDIT_DATABASE_URL", "AUDIT_HMAC_KEYS", "ZONE_SIGNING_KEYS"] as const;
+
 export interface AppConfig {
+  /** `production` only with ACL_ENV=production: then dev values, weak keys and missing secrets stop the start */
+  profile: "production" | "development";
   /** exact `iss` value; also the base for the JWKS URL */
   issuer: string;
   jwksUri: string;
@@ -29,6 +34,8 @@ export interface AppConfig {
   auditKeys: string | undefined;
   /** seconds between audit checkpoints written by the API (0 disables the scheduler) */
   auditCheckpointSeconds: number;
+  /** address the server binds; loopback unless a container needs its private-network interface */
+  host: string;
   bodyLimit: string;
   /** general rate limit: requests per window per authenticated subject (public routes: per client address) */
   throttleLimit: number;
@@ -56,12 +63,15 @@ function list(env: Env, name: string, def: string): string[] {
     .filter(Boolean);
 }
 
-export function loadConfig(env: Env = process.env): AppConfig {
+export function loadConfig(raw: Env = process.env): AppConfig {
+  const env = resolveSecretFiles(raw, SECRET_ENV);
+  const profile = profileOf(env);
+  const prod = profile === "production";
   const issuer = env.KEYCLOAK_ISSUER ?? "http://127.0.0.1:8080/realms/casefile";
   const url = new URL(issuer); // throws on garbage
   const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !loopback) {
-    throw new Error("KEYCLOAK_ISSUER must be https unless it points at loopback (dev only)");
+  if (url.protocol !== "https:" && (!loopback || prod)) {
+    throw new Error(prod ? "KEYCLOAK_ISSUER must be https in production" : "KEYCLOAK_ISSUER must be https unless it points at loopback (dev only)");
   }
   if (url.search || url.hash || issuer.endsWith("/")) throw new Error("KEYCLOAK_ISSUER must be the bare issuer URL");
 
@@ -71,12 +81,20 @@ export function loadConfig(env: Env = process.env): AppConfig {
   if (databaseUrl !== undefined && !/^postgres(ql)?:\/\//.test(databaseUrl)) throw new Error("DATABASE_URL must be a postgres:// URL");
   const auditKeys = env.AUDIT_HMAC_KEYS || undefined;
   if (databaseUrl !== undefined && auditKeys === undefined) throw new Error("AUDIT_HMAC_KEYS is required when DATABASE_URL is set: no audit key, no audit, no service");
+  if (prod) {
+    if (databaseUrl === undefined) throw new Error("DATABASE_URL is required in production");
+    if (zoneKeys === undefined) throw new Error("ZONE_SIGNING_KEYS is required in production (without it every export is refused as unmanaged)");
+    assertStrongDbUrl("DATABASE_URL", databaseUrl);
+    assertStrongKeyRing("AUDIT_HMAC_KEYS", auditKeys as string);
+    assertStrongKeyRing("ZONE_SIGNING_KEYS", zoneKeys);
+  }
   const corsOrigins = list(env, "CORS_ORIGINS", "");
   for (const o of corsOrigins) {
     if (o === "*" || !/^https?:\/\/[^/*]+$/.test(o)) throw new Error(`CORS_ORIGINS entry not an exact origin: ${o}`);
   }
 
   return {
+    profile,
     issuer,
     jwksUri: env.KEYCLOAK_JWKS_URI ?? `${issuer}/protocol/openid-connect/certs`,
     audience: env.API_AUDIENCE ?? "casefile-api",
@@ -90,6 +108,7 @@ export function loadConfig(env: Env = process.env): AppConfig {
     dbPoolMax: int(env, "DB_POOL_MAX", 10, 1, 50),
     auditKeys,
     auditCheckpointSeconds: int(env, "AUDIT_CHECKPOINT_SECONDS", 300, 0, 86_400),
+    host: env.API_HOST ?? "127.0.0.1",
     bodyLimit: env.BODY_LIMIT ?? "64kb",
     throttleLimit: int(env, "THROTTLE_LIMIT", 120, 1, 100_000),
     throttleWindowMs: int(env, "THROTTLE_WINDOW_MS", 60_000, 1_000, 3_600_000),

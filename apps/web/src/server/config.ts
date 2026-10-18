@@ -1,7 +1,12 @@
-import { parseNetworks, parseZoneKeys } from "@acl/netguard";
+import { assertStrongDbUrl, assertStrongKeyRing, assertStrongSecret, parseNetworks, parseZoneKeys, profileOf, resolveSecretFiles } from "@acl/netguard";
+
+/** secrets that may be given as `NAME_FILE=/path` (container secrets) instead of `NAME` */
+export const SECRET_ENV = ["CASEFILE_WEB_SECRET", "WEB_DATABASE_URL", "SESSION_ENCRYPTION_KEYS", "AUDIT_HMAC_KEYS", "ZONE_SIGNING_KEYS", "TRUSTED_PROXY_SECRET"] as const;
 
 // Runtime configuration of the BFF, parsed once on first use and validated. A bad value stops the request, never weakens a default.
 export interface WebConfig {
+  /** `production` only with ACL_ENV=production: then dev values, weak keys, plain http and missing secrets stop the start */
+  profile: "production" | "development";
   /** exact origin the browser uses; the redirect and post-logout URIs are derived from it */
   origin: string;
   issuer: string;
@@ -60,11 +65,14 @@ function bool(env: Env, n: string, def: boolean): boolean {
   return raw === "true";
 }
 
-export function loadWebConfig(env: Env = process.env): WebConfig {
+export function loadWebConfig(raw: Env = process.env): WebConfig {
+  const env = resolveSecretFiles(raw, SECRET_ENV);
+  const profile = profileOf(env);
+  const prod = profile === "production";
   const origin = need(env, "WEB_ORIGIN");
   const o = new URL(origin);
   if (o.origin !== origin) throw new Error("WEB_ORIGIN must be a bare origin (scheme, host, port)");
-  const loopbackOrigin = LOOPBACK.has(o.hostname);
+  const loopbackOrigin = LOOPBACK.has(o.hostname) && !prod;
   if (o.protocol !== "https:" && !loopbackOrigin) throw new Error("WEB_ORIGIN must be https unless it is loopback");
 
   const cookieSecure = bool(env, "COOKIE_SECURE", true);
@@ -72,11 +80,11 @@ export function loadWebConfig(env: Env = process.env): WebConfig {
 
   const issuer = need(env, "KEYCLOAK_ISSUER");
   const i = new URL(issuer);
-  const loopbackIdp = LOOPBACK.has(i.hostname);
+  const loopbackIdp = LOOPBACK.has(i.hostname) && !prod;
   if (i.protocol !== "https:" && !loopbackIdp) throw new Error("KEYCLOAK_ISSUER must be https unless it is loopback");
 
   const api = new URL(need(env, "API_BASE_URL"));
-  if (api.protocol !== "https:" && !LOOPBACK.has(api.hostname)) throw new Error("API_BASE_URL must be https unless it is loopback");
+  if (api.protocol !== "https:" && !(LOOPBACK.has(api.hostname) && !prod) && !(prod && env.API_INTERNAL_HTTP === "true")) throw new Error("API_BASE_URL must be https unless it is loopback (or, in production, API_INTERNAL_HTTP=true for a private network)");
   if (api.pathname !== "/" || api.search || api.hash) throw new Error("API_BASE_URL must be a bare origin");
 
   const databaseUrl = need(env, "WEB_DATABASE_URL");
@@ -89,7 +97,20 @@ export function loadWebConfig(env: Env = process.env): WebConfig {
   const zoneKeys = env.ZONE_SIGNING_KEYS || undefined;
   if (zoneKeys !== undefined) parseZoneKeys(zoneKeys);
 
+  if (prod) {
+    if (!trustedProxySecret) throw new Error("TRUSTED_PROXY_SECRET is required in production (without the proxy contract every client shares one rate-limit bucket and no one is managed)");
+    if (!zoneKeys) throw new Error("ZONE_SIGNING_KEYS is required in production");
+    if (!cookieSecure) throw new Error("COOKIE_SECURE must be true in production");
+    assertStrongSecret("TRUSTED_PROXY_SECRET", trustedProxySecret);
+    assertStrongSecret("CASEFILE_WEB_SECRET", need(env, "CASEFILE_WEB_SECRET"));
+    assertStrongDbUrl("WEB_DATABASE_URL", databaseUrl);
+    assertStrongKeyRing("SESSION_ENCRYPTION_KEYS", need(env, "SESSION_ENCRYPTION_KEYS"));
+    assertStrongKeyRing("AUDIT_HMAC_KEYS", need(env, "AUDIT_HMAC_KEYS"));
+    assertStrongKeyRing("ZONE_SIGNING_KEYS", zoneKeys);
+  }
+
   return {
+    profile,
     origin,
     issuer,
     clientId: env.OIDC_CLIENT_ID ?? "casefile-web",
