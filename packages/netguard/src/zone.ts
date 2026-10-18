@@ -45,6 +45,7 @@ export function verifyZone(keys: ZoneKeys, header: string | undefined, sub: stri
   const t = Number(ts);
   if (!key || t > nowSeconds + 5 || nowSeconds - t > maxAgeSeconds) return undefined;
   const given = Buffer.from(tag, "base64url");
+  if (given.toString("base64url") !== tag) return undefined; // one valid spelling: the last character of a 32-byte value carries only 4 bits, so Node would accept 16 spellings of the same bytes
   const want = mac(key, t, zone, sub);
   return given.length === want.length && timingSafeEqual(given, want) ? zone : undefined;
 }
