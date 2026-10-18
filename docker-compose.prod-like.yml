@@ -27,7 +27,6 @@ networks:
 volumes:
   postgres-data: {}
   attachments: {}
-  clamav-db: {} # signatures: seeded from the image on first use
 
 secrets:
   database_url_api: { file: ./secrets-dev/prod-like/database_url_api }
@@ -204,19 +203,17 @@ services:
 
   clamd:
     <<: *hardened
-    image: clamav/clamav:1.5.1@sha256:b32e587feae9f156d660704beeec4ee69c79fcf5af092bdc0f2f93892a29b553 # checked 2026-10-18; the image is linux/amd64 only (emulated on arm64 hosts)
-    platform: linux/amd64
-    environment:
-      CLAMAV_NO_FRESHCLAMD: "true" # the network is internal: signatures are the ones baked into the image (docs/deployment.md: update by rebuilding or a controlled update job)
-      CLAMAV_NO_MILTERD: "true"
-    init: false # the image starts its own tini
-    user: "100:101" # the clamav user of the image; the signature volume is created owned by it
-    volumes:
-      - clamav-db:/var/lib/clamav
-    tmpfs: ["/tmp:uid=100,gid=101", "/run/clamav:uid=100,gid=101", "/var/lock:uid=100,gid=101", "/var/log/clamav:uid=100,gid=101"]
-    networks: [scan]
+    build:
+      context: .
+      dockerfile: Dockerfile.clamd
+      args:
+        SIGNATURES_DATE: ${SIGNATURES_DATE:-unset} # change to refresh the baked-in signatures
+    image: casefile-clamd:prod-like
+    user: "100:101" # the clamav user of the image
+    tmpfs: ["/tmp:uid=100,gid=101", "/run/clamav:uid=100,gid=101"]
+    networks: [scan] # internal: the scanner has no way out, signatures are baked into the image
     healthcheck:
-      test: ["CMD-SHELL", "clamdcheck.sh"]
+      test: ["CMD", "clamdscan", "--ping", "1"]
       interval: 15s
       timeout: 10s
       retries: 20
