@@ -8,8 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "start": "node dist/main.js",
-    "migrate": "node dist/db/migrate-cli.js",
-    "seed": "node dist/db/seed-cli.js"
+    "migrate": "node --env-file-if-exists=../../.env dist/db/migrate-cli.js",
+    "seed": "node --env-file-if-exists=../../.env dist/db/seed-cli.js"
   },
   "dependencies": {
     "@acl/policy": "workspace:*",
