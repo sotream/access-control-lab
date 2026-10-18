@@ -3,14 +3,15 @@
 #
 #   casefile_migrator  owns the schema objects; used by migrations only, never by the running API
 #   casefile_app       what the API connects as: not owner, not superuser, no BYPASSRLS, minimal grants (granted by migrations)
-#   casefile_web       what the web BFF connects as: session table only (granted by migrations)
+#   casefile_web       what the web BFF connects as: session table and audit append (granted by migrations)
+#   casefile_audit     read-only verifier of the audit chain (granted by migrations)
 #
 # Databases: $POSTGRES_DB (dev data) and ${POSTGRES_DB}_test (automated tests, wiped freely).
 # Existing dev volumes do not re-run this: `docker compose down -v` to pick it up.
 set -eu
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
-  -v mig_pass="$CASEFILE_MIGRATOR_PASSWORD" -v app_pass="$CASEFILE_APP_PASSWORD" -v web_pass="$CASEFILE_WEB_DB_PASSWORD" \
+  -v mig_pass="$CASEFILE_MIGRATOR_PASSWORD" -v app_pass="$CASEFILE_APP_PASSWORD" -v web_pass="$CASEFILE_WEB_DB_PASSWORD" -v audit_pass="$CASEFILE_AUDIT_PASSWORD" \
   -v dev_db="$POSTGRES_DB" -v test_db="${POSTGRES_DB}_test" <<'SQL'
 CREATE ROLE casefile_migrator LOGIN PASSWORD :'mig_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
 CREATE ROLE casefile_app LOGIN PASSWORD :'app_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION CONNECTION LIMIT 25;
@@ -20,6 +21,11 @@ CREATE ROLE casefile_web LOGIN PASSWORD :'web_pass' NOSUPERUSER NOCREATEDB NOCRE
 ALTER ROLE casefile_web SET statement_timeout = '10s';
 ALTER ROLE casefile_web SET lock_timeout = '10s';
 ALTER ROLE casefile_web SET idle_in_transaction_session_timeout = '20s';
+
+-- read-only verifier of the audit chain (CLI `pnpm audit:verify`, checkpoints). It sees the audit tables and nothing else.
+CREATE ROLE casefile_audit LOGIN PASSWORD :'audit_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION CONNECTION LIMIT 5;
+ALTER ROLE casefile_audit SET statement_timeout = '60s';
+ALTER ROLE casefile_audit SET idle_in_transaction_session_timeout = '30s';
 
 -- guard rails that apply to every connection of the app role, whatever the pool does
 ALTER ROLE casefile_app SET statement_timeout = '5s';
@@ -33,9 +39,9 @@ SQL
 for db in "$POSTGRES_DB" "${POSTGRES_DB}_test"; do
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db" -v db="$db" <<'SQL'
 REVOKE CONNECT ON DATABASE :"db" FROM PUBLIC;
-GRANT CONNECT ON DATABASE :"db" TO casefile_migrator, casefile_app, casefile_web;
+GRANT CONNECT ON DATABASE :"db" TO casefile_migrator, casefile_app, casefile_web, casefile_audit;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
-GRANT USAGE ON SCHEMA public TO casefile_app, casefile_web;
+GRANT USAGE ON SCHEMA public TO casefile_app, casefile_web, casefile_audit;
 GRANT ALL ON SCHEMA public TO casefile_migrator;
 SQL
 done
