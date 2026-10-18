@@ -67,7 +67,8 @@ export async function keycloakLogin(authorizeUrl: string, user: string, jar: Jar
   const action = formAction(first.text);
   if (first.status !== 200 || !action) return { location: first.location, resp: first };
   let r = await idp(local(action), { method: "POST", jar, headers: FORM, body: form({ username: user, password: o.password ?? PASSWORD, credentialId: "" }) });
-  if (r.status === 200 && r.text.includes('name="otp"')) r = await idp(local(formAction(r.text)!), { method: "POST", jar, headers: FORM, body: form({ otp: await nextOtp(user) }) });
+  // the second factor: if Keycloak has already seen the step we picked (another process signed this user in within the same 30 seconds), take the next one
+  for (let attempt = 0; attempt < 3 && r.status === 200 && r.text.includes('name="otp"'); attempt++) r = await idp(local(formAction(r.text)!), { method: "POST", jar, headers: FORM, body: form({ otp: await nextOtp(user) }) });
   return { location: r.location, resp: r };
 }
 

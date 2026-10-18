@@ -37,6 +37,11 @@ const dc = (...a) => run("docker", [...compose, ...a]);
 const only = process.argv.slice(2).concat((process.env.MUTANTS ?? "").split(/\s+/).filter(Boolean));
 const results = [];
 
+const imageOf = (svc) => {
+  const id = dc("ps", "-q", svc).stdout.trim();
+  return id ? run("docker", ["inspect", "-f", "{{.Image}}", id]).stdout.trim() : "";
+};
+
 function rebuild(services, caddy) {
   if (services.length) {
     const r = dc("up", "-d", "--build", "--wait", "--wait-timeout", "600", ...services);
@@ -62,8 +67,11 @@ for (const m of MUTANTS) {
       if (!text.includes(find)) throw new Error(`pattern not found in ${f}`);
       writeFileSync(join(root, f), text.replace(find, replace));
     }
+    const before = new Map(m.rebuild.map((svc) => [svc, imageOf(svc)]));
     const failed = rebuild(m.rebuild, m.restartCaddy);
     if (failed) throw new Error(failed);
+    // a mutant that never reached the running containers proves nothing: say so instead of reporting a "survivor"
+    for (const [svc, was] of before) if (was && imageOf(svc) === was) throw new Error(`the ${svc} container still runs the image from before the mutation`);
     const t = run("pnpm", ["--filter", "@acl/attack-tests", "exec", "vitest", "run", ...m.tests.map((x) => `src/${x}`)], { env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0", ATTACK_NO_UP: "1", NODE_EXTRA_CA_CERTS: join(root, "secrets-dev/prod-like/ca.crt") } });
     const plain = `${t.stdout}\n${t.stderr}`.replace(/\u001b\[[0-9;]*m/g, "");
     const summary = /Tests\s+(.*)/.exec(plain)?.[1]?.trim() ?? `no summary; ${plain.split("\n").filter((l) => /FAIL|Error|×|✗|❯/.test(l) && !/ERR_PNPM|pnpm recursive/.test(l)).slice(0, 8).join(" | ").slice(0, 700)}`;
