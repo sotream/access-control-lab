@@ -9,6 +9,7 @@ export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const dev = process.env.NODE_ENV === "development";
   const hsts = process.env.HSTS_ENABLED === "true";
+  const download = request.nextUrl.pathname.startsWith("/attachments/");
   const csp = [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -21,6 +22,7 @@ export function proxy(request: NextRequest) {
     "base-uri 'none'",
     "object-src 'none'",
     ...(hsts ? ["upgrade-insecure-requests"] : []),
+    ...(download ? ["sandbox"] : []), // a downloaded file may never run as part of this origin
   ].join("; ");
 
   const requestHeaders = new Headers(request.headers);

@@ -97,8 +97,7 @@ Unauthenticated callers get 401 before any lookup. Role-only routes (list, audit
   with **unit, author and status taken from the verified principal**, never from the body.
 - `@Policy({ resource: null })` is refused at declaration time for create, update, submit, approve, delete and export, so a role-only check
   cannot be mistaken for a full one.
-- Environment is built from the token (`acr`, `amr`) and the request: zone is `managed` only if the socket address is in `MANAGED_ADDRESSES`
-  (X-Forwarded-For is never trusted); `now` comes from an injected clock.
+- Environment is built from the token (`acr`, `amr`) and the request: zone is `managed` only when the request carries `x-acl-zone` signed by the BFF for this token's subject (`ZONE_SIGNING_KEYS`, stage 8, docs/hardening.md); the socket address and every forwarded header are ignored; `now` comes from an injected clock.
 - Decision log, one line per decision: `reqId, sub, action, resourceId, effect, reason, rules, obligations`. No claims, no token. Break-glass adds
   a `break_glass_alert` line with the justification.
 - The in-memory case-file controller is a **test fixture** in `apps/api/test/`, not part of the build.
@@ -145,5 +144,4 @@ RBAC-only instead of full evaluation (20); unit taken from the body in the fixtu
 the `acr=mfa` without otp case); step-up code removed (2).
 
 Not verified: concurrency (the fixture is single-threaded; the real loader and the write must be in one transaction in stage 5, otherwise a check/use race
-exists between `load` and the update), the final shape of `managedAddresses` once the BFF sits in front (the BFF cannot vouch for the end user's network zone
-without a trust design, stage 6), and a policy-as-data audit export for the auditor.
+exists between `load` and the update), (the network zone is decided in stage 8: signed by the BFF, see docs/hardening.md), and a policy-as-data audit export for the auditor.

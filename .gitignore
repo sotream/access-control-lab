@@ -11,3 +11,5 @@ infra/keycloak/data/
 *.tsbuildinfo
 next-env.d.ts
 tests/identity/.cache/
+data/
+.claude/

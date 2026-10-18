@@ -43,6 +43,11 @@ describe("web configuration fails closed", () => {
     ["bad boolean", { COOKIE_SECURE: "yes" }],
     ["idle timeout absurd", { SESSION_IDLE_SECONDS: "5" }],
     ["session cap zero", { MAX_SESSIONS_PER_USER: "0" }],
+    ["managed CIDR typo", { MANAGED_CIDRS: "10.0.0.0/33" }],
+    ["managed entry not an address", { MANAGED_CIDRS: "office" }],
+    ["short proxy secret", { TRUSTED_PROXY_SECRET: "short" }],
+    ["short zone key", { ZONE_SIGNING_KEYS: "z:AAAA" }],
+    ["rate limit zero", { RATE_AUTH_PER_MINUTE: "0" }],
   ])("refuses %s", (_n, over) => expect(() => loadWebConfig({ ...base, ...over })).toThrow());
 });
 
@@ -98,5 +103,60 @@ describe("esc", () => {
     expect(esc(`" onmouseover='x' \``)).toBe("&quot; onmouseover=&#39;x&#39; &#96;");
     expect(esc("a & b")).toBe("a &amp; b");
     expect(esc(5)).toBe("5");
+  });
+});
+
+describe("web production profile (ACL_ENV=production)", () => {
+  /** a long, varied string computed at run time (no secret-looking literal in the repository) */
+  const strong = (seed: number) => Buffer.from(Array.from({ length: 24 }, (_, i) => (i * seed + 19) % 251)).toString("base64url");
+  const key = (seed: number) => Buffer.from(Array.from({ length: 32 }, (_, i) => (i * seed + 11) % 251)).toString("base64");
+  const good = {
+    ACL_ENV: "production",
+    WEB_ORIGIN: "https://vault.example",
+    KEYCLOAK_ISSUER: "https://id.example/realms/casefile",
+    API_BASE_URL: "https://api.example",
+    WEB_DATABASE_URL: "postgres://casefile_web:q9Xv2LmT8sWk4RzP7nYd@db.internal:5432/acl",
+    CASEFILE_WEB_SECRET: strong(17),
+    SESSION_ENCRYPTION_KEYS: `session-2026:${key(29)}`,
+    AUDIT_HMAC_KEYS: `audit-2026:${key(37)}`,
+    ZONE_SIGNING_KEYS: `zone-2026:${key(41)}`,
+    TRUSTED_PROXY_SECRET: strong(23),
+  };
+  it("accepts a complete, strong configuration", () => {
+    const c = loadWebConfig(good);
+    expect(c.profile).toBe("production");
+    expect(c.cookieSecure).toBe(true);
+    expect(c.hsts).toBe(true);
+  });
+  it.each([
+    ["typo in the profile", { ACL_ENV: "prod" }],
+    ["no proxy secret", { TRUSTED_PROXY_SECRET: undefined }],
+    ["no zone keys", { ZONE_SIGNING_KEYS: undefined }],
+    ["dev proxy secret", { TRUSTED_PROXY_SECRET: "dev-only-proxy-secret-0123456789abcdef" }],
+    ["dev client secret", { CASEFILE_WEB_SECRET: "dev-only-casefile-web-secret-0123456789" }],
+    ["short client secret", { CASEFILE_WEB_SECRET: "s" }],
+    ["dev session keys", { SESSION_ENCRYPTION_KEYS: "dev-1:ZGV2LW9ubHktc2Vzc2lvbi1rZXktMDEyMzQ1Njc4OWE=" }],
+    ["dev database password", { WEB_DATABASE_URL: "postgres://casefile_web:dev-only-casefile-web-password@db:5432/acl" }],
+    ["plain-http loopback origin", { WEB_ORIGIN: "http://127.0.0.1:3000" }],
+    ["plain-http loopback issuer", { KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile" }],
+    ["plain-http api off the private-network flag", { API_BASE_URL: "http://api:3001" }],
+    ["insecure cookies", { COOKIE_SECURE: "false" }],
+  ])("refuses %s", (_n, over) => expect(() => loadWebConfig({ ...good, ...over })).toThrow());
+  it("says why when the proxy secret or the zone keys are missing (not a crash further down)", () => {
+    expect(() => loadWebConfig({ ...good, TRUSTED_PROXY_SECRET: undefined })).toThrow(/TRUSTED_PROXY_SECRET is required in production/);
+    expect(() => loadWebConfig({ ...good, ZONE_SIGNING_KEYS: undefined })).toThrow(/ZONE_SIGNING_KEYS is required in production/);
+  });
+  it("plain http to the API only with the explicit private-network flag", () => {
+    expect(loadWebConfig({ ...good, API_BASE_URL: "http://api:3001", API_INTERNAL_HTTP: "true" }).apiBase).toBe("http://api:3001");
+  });
+  it("error messages never carry a secret value", () => {
+    const canary = "CANARY-SECRET-VALUE-8812";
+    for (const over of [{ CASEFILE_WEB_SECRET: canary }, { TRUSTED_PROXY_SECRET: canary }, { WEB_DATABASE_URL: `postgres://u:${canary}@h/db` }]) {
+      try {
+        loadWebConfig({ ...good, ...over });
+      } catch (e) {
+        expect(String((e as Error).message)).not.toContain(canary);
+      }
+    }
   });
 });

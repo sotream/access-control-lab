@@ -8,7 +8,7 @@
   },
   "scripts": {
     "lint": "eslint . && node scripts/check-invisible-chars.mjs",
-    "typecheck": "pnpm --filter @acl/audit build && pnpm -r typecheck",
+    "typecheck": "pnpm --filter @acl/audit --filter @acl/netguard build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
     "test:identity": "pnpm --filter @acl/identity-tests test:identity",

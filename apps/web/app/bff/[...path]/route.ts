@@ -1,5 +1,6 @@
 import { allowed, apiFetch, MAX_PROXY_BODY, ProxyRefused, QUERY_KEYS } from "../../../src/server/api";
-import { json, requireCsrfSession } from "../../../src/server/guard";
+import { boundBody, json, requireCsrfSession } from "../../../src/server/guard";
+import { limited } from "../../../src/server/limits";
 import { sessionFromCookieHeader } from "../../../src/server/session";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,15 @@ async function handle(req: Request, ctx: Ctx): Promise<Response> {
   if (method === "GET") {
     session = await sessionFromCookieHeader(req.headers.get("cookie"));
     if (!session) return json(401, { error: "unauthenticated" });
+    const slow = await limited("user", session.userSub);
+    if (slow) return slow;
   } else {
     const r = await requireCsrfSession(req, req.headers.get("x-csrf-token"));
     if ("refusal" in r) return r.refusal;
     session = r.session;
     if (method === "POST" || method === "PATCH") {
+      const tooBig = boundBody(req, MAX_PROXY_BODY + 1024);
+      if (tooBig) return tooBig;
       const ct = req.headers.get("content-type") ?? "";
       const raw = await req.text();
       if (raw.length > 0) {

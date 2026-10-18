@@ -4,6 +4,7 @@ import { evaluate, evaluateRole, type Decision, type Environment, type Resource,
 import { CONFIG, type AppConfig } from "../config.js";
 import { ServiceUnavailableException } from "@nestjs/common";
 import { sanitizeText } from "@acl/audit";
+import { parseZoneKeys, verifyZone, type ZoneKeys } from "@acl/netguard";
 import { AUDIT_WRITER, decisionEntry, type AuditWriter } from "../audit/audit.js";
 import { StepUpRequired } from "../http/errors.js";
 import { refusalFor } from "./refusal.js";
@@ -17,6 +18,7 @@ export const CLOCK = Symbol("CLOCK");
 export type Clock = () => number; // epoch milliseconds
 
 const BREAK_GLASS_HEADER = "x-break-glass-justification";
+const ZONE_HEADER = "x-acl-zone";
 const MAX_JUSTIFICATION = 500;
 
 export const toSubject = (p: Principal): Subject => ({
@@ -34,17 +36,29 @@ const requestedId = (req: AppRequest): string | undefined => {
 };
 
 /** `::ffff:127.0.0.1` and `127.0.0.1` are the same client */
-const normalize = (ip: string | undefined) => (ip ?? "").replace(/^::ffff:/, "");
 
 @Injectable()
 export class PolicyEnforcer {
+  private readonly zoneKeys: ZoneKeys | undefined;
+
   constructor(
     @Inject(ModuleRef) private readonly modules: ModuleRef,
     @Inject(CONFIG) private readonly cfg: AppConfig,
     @Inject(LOGGER) private readonly logger: JsonLogger,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AUDIT_WRITER) private readonly audit: AuditWriter,
-  ) {}
+  ) {
+    this.zoneKeys = cfg.zoneKeys ? parseZoneKeys(cfg.zoneKeys) : undefined;
+  }
+
+  /** The zone the BFF vouched for (signed for this subject, fresh); anything else is "unmanaged", whatever the socket or any other header says. */
+  private zone(req: AppRequest, p: Principal): "managed" | "unmanaged" {
+    const raw = req.headers[ZONE_HEADER];
+    if (raw === undefined) return "unmanaged";
+    const verified = this.zoneKeys && typeof raw === "string" ? verifyZone(this.zoneKeys, raw, p.sub, Math.floor(Date.now() / 1000)) : undefined; // real time, not the policy clock: freshness is replay protection
+    if (!verified) this.logger.event("warn", "zone_header_rejected", { reqId: req.id, sub: p.sub });
+    return verified ?? "unmanaged";
+  }
 
   /** Everything the policy needs besides subject and resource. Built here from the request and the verified token, never from client claims. */
   environment(req: AppRequest, p: Principal): Environment {
@@ -53,7 +67,7 @@ export class PolicyEnforcer {
       acr: p.acr,
       amr: p.amr,
       now: Math.floor(this.clock() / 1000),
-      networkZone: this.cfg.managedAddresses.includes(normalize(req.ip)) ? "managed" : "unmanaged",
+      networkZone: this.zone(req, p),
       ...(header === undefined
         ? {}
         : // control and bidi characters become spaces, whitespace collapses: the cleaned text is what the policy, the database context and the audit row all see.

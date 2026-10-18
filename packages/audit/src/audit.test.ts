@@ -86,13 +86,14 @@ describe("entries are validated like the table constraints (T-14, T-24)", () => 
 });
 
 describe("details: a fixed set of keys with fixed types (no tokens, no claim dumps, no free text)", () => {
-  it("allowed keys list", () => expect([...DETAIL_KEYS].sort()).toEqual(["acr", "alert", "authoritative", "count", "detail_code", "event", "filters", "format", "from_id", "justification", "rule_ids", "to_id", "truncated"]));
+  it("allowed keys list", () => expect([...DETAIL_KEYS].sort()).toEqual(["acr", "alert", "authoritative", "count", "detail_code", "event", "filters", "format", "from_id", "justification", "media", "rule_ids", "scan", "sha256", "size", "to_id", "truncated"]));
   it.each([
     [{ justification: "incident 4711" }],
     [{ alert: true, authoritative: false, truncated: true }],
     [{ rule_ids: ["a.b:c"], event: "login", acr: "mfa", detail_code: "X_1" }],
     [{ count: 0, from_id: 1, to_id: 2, format: "csv" }],
     [{ filters: { from: "2026-01-01", actor: "u1", effect: "deny" } }],
+    [{ size: 1234, sha256: "a".repeat(64), media: "pdf", scan: "CLEAN" }],
     [{}],
   ])("accepts %j", (d) => expect(() => validateDetails(d)).not.toThrow());
   it.each([
@@ -114,12 +115,18 @@ describe("details: a fixed set of keys with fixed types (no tokens, no claim dum
     ["filter value long", { filters: { actor: "x".repeat(65) } }],
     ["filter value not string", { filters: { actor: 5 } }],
     ["nested object where a tag is expected", { acr: { a: 1 } }],
+    ["negative size", { size: -1 }],
+    ["absurd size", { size: 2_000_000_000 }],
+    ["sha256 uppercase", { sha256: "A".repeat(64) }],
+    ["sha256 short", { sha256: "a".repeat(63) }],
+    ["media type other", { media: "svg" }],
+    ["scan with space", { scan: "a b" }],
   ])("refuses %s", (_n, d) => expect(() => validateDetails(d)).toThrow());
 });
 
 describe("details size", () => {
   it("the worst legitimate details object fits the limit with room to spare", () => {
-    const d = { justification: "x".repeat(500), rule_ids: Array.from({ length: 20 }, () => "y".repeat(64)), filters: { from: "z".repeat(64), to: "z".repeat(64), actor: "z".repeat(64), resource: "z".repeat(64), action: "z".repeat(64), effect: "z".repeat(64) }, alert: true, authoritative: true, event: "e".repeat(64), acr: "a".repeat(64), detail_code: "d".repeat(64), count: 1, from_id: 1, to_id: 2, format: "csv", truncated: false };
+    const d = { justification: "x".repeat(500), rule_ids: Array.from({ length: 20 }, () => "y".repeat(64)), filters: { from: "z".repeat(64), to: "z".repeat(64), actor: "z".repeat(64), resource: "z".repeat(64), action: "z".repeat(64), effect: "z".repeat(64) }, alert: true, authoritative: true, event: "e".repeat(64), acr: "a".repeat(64), detail_code: "d".repeat(64), size: 1, sha256: "f".repeat(64), media: "text", scan: "s".repeat(64), count: 1, from_id: 1, to_id: 2, format: "csv", truncated: false };
     expect(() => validateDetails(d)).not.toThrow();
     expect(JSON.stringify(d).length).toBeLessThan(4000);
   });

@@ -3,7 +3,7 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.NEXT_PHASE === "phase-production-build") return;
   const { config } = await import("./src/server/config");
   try {
-    config();
+    console.log(JSON.stringify({ level: "info", msg: "web starting", profile: config().profile }));
   } catch (e) {
     // Next would keep serving 500s; a deployment should see a failed start instead
     console.error(JSON.stringify({ level: "error", msg: "invalid configuration, refusing to start", error: e instanceof Error ? e.message : String(e) }));

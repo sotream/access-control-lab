@@ -10,6 +10,9 @@
       ],
       "@acl/audit": [
         "../../packages/audit/src/index.ts"
+      ],
+      "@acl/netguard": [
+        "../../packages/netguard/src/index.ts"
       ]
     }
   },

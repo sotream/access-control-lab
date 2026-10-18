@@ -1,6 +1,8 @@
 // Servers and a scripted "browser" for the BFF tests: real Next.js (production build), real API, real Postgres, real Keycloak.
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createApp } from "../../../apps/api/src/app.js";
@@ -20,6 +22,12 @@ const env = (n: string) => {
   return v;
 };
 
+/** a dev-only secret (>= 32 bytes) the "reverse proxy" of the tests proves itself with */
+export const PROXY_SECRET = "dev-only-proxy-secret-0123456789abcdef";
+export const MANAGED_NET = "10.1.0.0/16";
+/** headers the real reverse proxy would add for a client at this address */
+export const viaProxy = (ip: string): Record<string, string> => ({ "x-acl-proxy-secret": PROXY_SECRET, "x-acl-client-ip": ip });
+
 export const SESSION_KEYS = () => env("SESSION_ENCRYPTION_KEYS");
 export const adminDb = () => adminPool();
 
@@ -27,7 +35,7 @@ export const adminDb = () => adminPool();
 
 export async function startApi() {
   const logs: string[] = [];
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: env("AUDIT_HMAC_KEYS"), AUDIT_CHECKPOINT_SECONDS: "0", MANAGED_ADDRESSES: "127.0.0.1", THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000" });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: env("AUDIT_HMAC_KEYS"), AUDIT_CHECKPOINT_SECONDS: "0", ZONE_SIGNING_KEYS: env("ZONE_SIGNING_KEYS"), ATTACHMENT_DIR: join(mkdtempSync(join(tmpdir(), "acl-bff-attachments-")), "store"), THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000" });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), clock: () => Date.UTC(2026, 9, 17, 12, 0, 0) });
   await app.listen(API_PORT, "127.0.0.1");
   return { logs, stop: () => app.close() };
@@ -55,6 +63,13 @@ export async function startWeb(over: Record<string, string> = {}): Promise<WebSe
       WEB_DATABASE_URL: withDb(env("WEB_DATABASE_URL"), TEST_DB),
       COOKIE_SECURE: "false",
       HSTS_ENABLED: "false",
+      ZONE_SIGNING_KEYS: env("ZONE_SIGNING_KEYS"),
+      MANAGED_CIDRS: MANAGED_NET,
+      TRUSTED_PROXY_SECRET: PROXY_SECRET,
+      // generous: the flows below log in dozens of times from one address; the limit tests start their own server with small values
+      RATE_AUTH_PER_MINUTE: "10000",
+      RATE_USER_PER_MINUTE: "100000",
+      RATE_IP_PER_MINUTE: "100000",
       ...over,
     },
     stdio: ["ignore", "pipe", "pipe"],

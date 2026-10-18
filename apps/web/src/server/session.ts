@@ -3,6 +3,7 @@ import { auditAuth } from "./audit";
 import { config } from "./config";
 import { parseCookies, sessionCookieName } from "./cookies";
 import { sessionStore } from "./db";
+import { refreshAllowed } from "./limits";
 import { client, oidc } from "./oidc";
 import type { Session, TokenSet } from "./session-store";
 
@@ -25,6 +26,7 @@ export async function sessionFromCookieHeader(header: string | null): Promise<Se
   const needs = (t: TokenSet) => t.accessExpiresAt - Math.floor(Date.now() / 1000) < skew;
   if (!needs(s.tokens)) return s;
   return store.withRefresh(sid, needs, async (t) => {
+    if (!refreshAllowed(s.userSub)) return t; // over the per-user refresh budget: keep the old tokens, the API will refuse them if they are expired
     const grant = await client.refreshTokenGrant(await oidc(), t.refreshToken);
     return tokenSetFrom(grant, t);
   }, (killed) => void auditAuth({ action: "auth.session_killed", actorSub: killed.userSub, effect: "deny", reason: "REFRESH_REFUSED" }));
