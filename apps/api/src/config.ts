@@ -34,6 +34,13 @@ export interface AppConfig {
   auditKeys: string | undefined;
   /** seconds between audit checkpoints written by the API (0 disables the scheduler) */
   auditCheckpointSeconds: number;
+  /** where attachment bytes live (a dedicated volume, outside any web root) */
+  attachmentDir: string;
+  attachmentMaxBytes: number;
+  /** `none`: development stub (everything clean; in production it refuses to answer, nothing becomes downloadable); `clamd`: INSTREAM over TCP */
+  attachmentScanner: "none" | "clamd";
+  clamdHost: string;
+  clamdPort: number;
   /** address the server binds; loopback unless a container needs its private-network interface */
   host: string;
   bodyLimit: string;
@@ -61,6 +68,12 @@ function list(env: Env, name: string, def: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function scanner(v: string | undefined): "none" | "clamd" {
+  if (v === undefined || v === "" || v === "none") return "none";
+  if (v === "clamd") return "clamd";
+  throw new Error("ATTACHMENT_SCANNER must be none or clamd");
 }
 
 export function loadConfig(raw: Env = process.env): AppConfig {
@@ -108,6 +121,11 @@ export function loadConfig(raw: Env = process.env): AppConfig {
     dbPoolMax: int(env, "DB_POOL_MAX", 10, 1, 50),
     auditKeys,
     auditCheckpointSeconds: int(env, "AUDIT_CHECKPOINT_SECONDS", 300, 0, 86_400),
+    attachmentDir: env.ATTACHMENT_DIR ?? "./data/attachments",
+    attachmentMaxBytes: int(env, "ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024, 1024, 25 * 1024 * 1024),
+    attachmentScanner: scanner(env.ATTACHMENT_SCANNER),
+    clamdHost: env.CLAMD_HOST ?? "127.0.0.1",
+    clamdPort: int(env, "CLAMD_PORT", 3310, 1, 65_535),
     host: env.API_HOST ?? "127.0.0.1",
     bodyLimit: env.BODY_LIMIT ?? "64kb",
     throttleLimit: int(env, "THROTTLE_LIMIT", 120, 1, 100_000),

@@ -16,6 +16,7 @@ export const ROUTES: readonly { method: string; path: RegExp }[] = [
   { method: "POST", path: new RegExp(`^/case-files/${UUID}/submit$`) },
   { method: "POST", path: new RegExp(`^/case-files/${UUID}/approve$`) },
   { method: "GET", path: new RegExp(`^/case-files/${UUID}/export$`) },
+  { method: "GET", path: new RegExp(`^/case-files/${UUID}/attachments$`) }, // metadata only; bytes go through the dedicated download route
   // auditor endpoints (the API refuses everyone else; these entries only make them reachable through the BFF)
   { method: "GET", path: /^\/audit-log$/ },
   { method: "GET", path: /^\/audit-log\/export$/ },
@@ -116,3 +117,70 @@ export async function apiFetch(session: Session, method: string, path: string, o
 }
 
 export const MAX_PROXY_BODY = MAX_BODY;
+
+export const MAX_UPLOAD = 5 * 1024 * 1024;
+
+/** Upload goes through this function only (never the generic proxy): raw bytes, name and declared type as headers, nothing else from the browser. */
+export async function apiUpload(session: Session, caseId: string, bytes: Buffer, declaredType: string, name: string): Promise<ApiResult> {
+  if (!new RegExp(`^${UUID}$`).test(caseId) || bytes.length === 0 || bytes.length > MAX_UPLOAD) throw new ProxyRefused(400);
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${session.tokens.accessToken}`,
+    accept: "application/json",
+    "content-type": "application/octet-stream",
+    "x-attachment-type": declaredType.slice(0, 100),
+    "x-attachment-name": encodeURIComponent(name.slice(0, 200)),
+  };
+  const ring = config().zoneKeys;
+  if (ring) {
+    const h = await currentHeaders();
+    headers["x-acl-zone"] = signZone(parseZoneKeys(ring), h ? zoneOf(h) : "unmanaged", session.userSub, Math.floor(Date.now() / 1000));
+  }
+  const res = await fetch(`${config().apiBase}/case-files/${caseId}/attachments`, { method: "POST", headers, body: new Uint8Array(bytes), redirect: "manual", signal: AbortSignal.timeout(30_000), cache: "no-store" });
+  if (res.status >= 300 && res.status < 400) throw new ProxyRefused(502);
+  const text = await readCapped(res, MAX_RESPONSE);
+  return { status: res.status, body: text, contentType: "application/json", wwwAuthenticate: res.headers.get("www-authenticate"), retryAfter: res.headers.get("retry-after"), stepUp: res.status === 403 && (res.headers.get("www-authenticate") ?? "").includes("insufficient_user_authentication"), proof: null };
+}
+
+export interface Download {
+  status: number;
+  bytes: Buffer;
+  contentType: string | null;
+  disposition: string | null;
+  stepUp: boolean;
+}
+
+/** Download of one attachment: binary, capped, with the API's headers kept only for the two the route needs. */
+export async function apiDownload(session: Session, caseId: string, attachmentId: string): Promise<Download> {
+  const re = new RegExp(`^${UUID}$`);
+  if (!re.test(caseId) || !re.test(attachmentId)) throw new ProxyRefused(404);
+  const headers: Record<string, string> = { authorization: `Bearer ${session.tokens.accessToken}` };
+  const ring = config().zoneKeys;
+  if (ring) {
+    const h = await currentHeaders();
+    headers["x-acl-zone"] = signZone(parseZoneKeys(ring), h ? zoneOf(h) : "unmanaged", session.userSub, Math.floor(Date.now() / 1000));
+  }
+  const res = await fetch(`${config().apiBase}/case-files/${caseId}/attachments/${attachmentId}`, { method: "GET", headers, redirect: "manual", signal: AbortSignal.timeout(30_000), cache: "no-store" });
+  if (res.status >= 300 && res.status < 400) throw new ProxyRefused(502);
+  const reader = res.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (reader) {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_UPLOAD + 1024) {
+        await reader.cancel();
+        throw new ProxyRefused(502);
+      }
+      chunks.push(value);
+    }
+  }
+  return {
+    status: res.status,
+    bytes: Buffer.concat(chunks),
+    contentType: res.headers.get("content-type"),
+    disposition: res.headers.get("content-disposition"),
+    stepUp: res.status === 403 && (res.headers.get("www-authenticate") ?? "").includes("insufficient_user_authentication"),
+  };
+}

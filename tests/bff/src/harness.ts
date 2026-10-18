@@ -1,6 +1,8 @@
 // Servers and a scripted "browser" for the BFF tests: real Next.js (production build), real API, real Postgres, real Keycloak.
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createApp } from "../../../apps/api/src/app.js";
@@ -33,7 +35,7 @@ export const adminDb = () => adminPool();
 
 export async function startApi() {
   const logs: string[] = [];
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: env("AUDIT_HMAC_KEYS"), AUDIT_CHECKPOINT_SECONDS: "0", ZONE_SIGNING_KEYS: env("ZONE_SIGNING_KEYS"), THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000" });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: env("AUDIT_HMAC_KEYS"), AUDIT_CHECKPOINT_SECONDS: "0", ZONE_SIGNING_KEYS: env("ZONE_SIGNING_KEYS"), ATTACHMENT_DIR: join(mkdtempSync(join(tmpdir(), "acl-bff-attachments-")), "store"), THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000" });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), clock: () => Date.UTC(2026, 9, 17, 12, 0, 0) });
   await app.listen(API_PORT, "127.0.0.1");
   return { logs, stop: () => app.close() };
