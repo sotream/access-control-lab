@@ -46,6 +46,8 @@ A plain form posts the choice to `/actions/theme`, which sets a host-only cookie
 
 `src/ui/components.tsx`: `Badge`, `Banner`, `Chip`, `Status`, `StatusChip`, `ScanChip`, `Alert`, `Panel`, `KV`, `Field`, `Mono`, `Page`. `src/ui/chrome.tsx`: `Chrome`, `TopBar`, `SideNav`. `src/ui/case-list.tsx`: the list used by my cases, unit cases and the review queue. `src/ui/stepup.tsx`: the step-up explanation. `src/ui/errors.tsx`: `ErrorView`.
 
+Selects use a chevron drawn with two gradient strokes (no image, no `data:` URI, no script; the CSP is untouched): 14 px wide, 0.75rem from the right edge, with `padding-right: 2.5rem` so a label never runs under it; the colour is a token (`--muted`, `--text` on hover), disabled selects are dimmed, and in forced-colors mode the browser's own arrow is used. `tests/e2e/src/controls.spec.ts` pins the numbers in both themes.
+
 Every string is in `src/ui/i18n.ts` (English). A German dictionary is a second object of the type `Dict` and a locale switch in `dict()`; nothing else needs to change. Data (titles, units) is never in the dictionary and is always rendered through React (escaped); there is no `dangerouslySetInnerHTML`, and `ui.test.ts` checks that no dictionary string contains markup.
 
 ## Pages
