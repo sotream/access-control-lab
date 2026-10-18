@@ -37,6 +37,21 @@ describe("A-60 break-glass: who may use it, for what, and what it leaves behind"
     const longest = Number(psql(`SELECT max(length(details->>'justification')) FROM audit_log WHERE details ? 'justification'`));
     expect(longest).toBeLessThanOrEqual(500);
   });
+  it("straight at the API (the BFF cleans the text first, the API must not rely on that): encoded control and bidi characters are cleaned, never a 5xx, never stored raw", async () => {
+    const f = fixtures();
+    const t = await oidcTokens("unit-admin-beta");
+    const call = (j: string) => api(`/case-files/${f.confAlphaA}`, { headers: { authorization: `Bearer ${t.access_token}`, "x-break-glass-justification": j } });
+    const ok = await call(encodeURIComponent("incident 4711\u0007\u202e\r\n<b>x</b>\u0000 end"));
+    expect(ok.status).toBe(200);
+    const stored = psql(`SELECT details->>'justification' FROM audit_log WHERE resource_id = ${q(f.confAlphaA)} AND details ? 'justification' ORDER BY id DESC LIMIT 1`);
+    expect(stored).not.toMatch(/[\u0000-\u001f\u007f\u202e]/u);
+    expect(stored).toContain("incident 4711");
+    for (const j of [encodeURIComponent("\u0007\u202e\u200b"), encodeURIComponent(" \t\n"), "%E0%A4%A", "%", encodeURIComponent("x".repeat(50_000)).slice(0, 7000)]) {
+      const r = await call(j);
+      expect(r.status, j.slice(0, 40)).toBeLessThan(500);
+    }
+  });
+
   it("everyone else gets nothing from it: analysts, auditors, platform admins, users below the floor (by design a unit admin of ANY unit may use it, with a justification)", async () => {
     const f = fixtures();
     for (const user of ["analyst-official", "reviewer", "auditor", "platform-admin", "analyst-secret-b"] as const) {
