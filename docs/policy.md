@@ -119,16 +119,16 @@ and tests parity against this.
 
 ## Tests and evidence
 
-- `packages/policy`: 275 tests, 100% lines/branches (gate 95% in `vitest.config.ts`, enforced by `pnpm test` in CI): full role x action matrix (and
+- `packages/policy`: 100% lines/branches (gate 95% in `vitest.config.ts`, enforced by `pnpm test` in CI): full role x action matrix (and
   role-only variant), clearance grid, compartment subset/superset/empty/duplicates/case, 33 malformed-input cases, step-up cases, unit, ownership, status
   machine, separation of duties, export zone and window boundaries, break-glass, deny-overrides, purity/determinism (clock stubbed, inputs frozen).
 - Property tests (fast-check 4.10.2, 1500 runs each): deny when clearance < classification for any input incl. break-glass; adding a resource
   compartment never turns deny into allow; adding a subject compartment never turns a read allow into deny; no allow without a role grant (independent matrix);
   no SECRET allow without mfa+otp; approval never to author or submitter; cross-unit writes only for the reviewer's approve; allowed changes only from the
   state machine's source status; break-glass allow implies read + unit-admin + justification + floor; garbage input never throws; read filter parity.
-- `apps/api` (129 tests): guard + policy with signed tokens and the fixture: existence hiding, step-up challenge, roles outside the matrix, unit/ownership/mass
+- `apps/api`: guard + policy with signed tokens and the fixture: existence hiding, step-up challenge, roles outside the matrix, unit/ownership/mass
   assignment, lifecycle and separation of duties, export zone/window, break-glass, decision log, route inventory.
-- `tests/identity` (71 tests with the 39 earlier): the same scenarios with real Keycloak tokens of the seed users.
+- `tests/identity`: the same scenarios with real Keycloak tokens of the seed users.
 
 ### Mutation check (by hand)
 

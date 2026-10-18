@@ -101,7 +101,7 @@ Each of these was found by an attack, fixed in the same pull request, and is now
 | M01 | the API checks neither audience nor authorised party of a token | survives, **redundant layers**: the account-console token also lacks the application claims (clearance, unit) the API requires, so it is refused three times over |
 | M02 | the audit list needs only the right to read case files | killed (A-25) |
 | M03 | prototype-pollution and empty keys no longer refused | killed (A-94, A-95, A-24) |
-| M04 | uploads stored without inspecting the bytes | killed (A-40, 11 tests) |
+| M04 | uploads stored without inspecting the bytes | killed (A-40) |
 | M05 | a quarantined or pending attachment can be downloaded | killed (A-41) |
 | M06 | an attachment id works under any readable case file (IDOR) | killed (A-44) |
 | M07 | the BFF's CSRF check always passes | killed (A-14, A-13) |
@@ -120,4 +120,4 @@ Each of these was found by an attack, fixed in the same pull request, and is now
 
 ## Not attacked here
 
-Exploits that need a real browser (CSP enforcement as the browser implements it, `__Host-` cookie handling, clickjacking in practice: the headers are asserted, the browser is not driven), denial of service beyond the lite cases above, anything that needs more than one replica, attacks on the host or the container runtime, social engineering, and attacks on Keycloak's own code beyond its configuration. See `docs/accepted-risks.md` and the "Not verified" lists in `docs/hardening.md` and `docs/asvs.md`.
+Exploits that need a real browser are covered separately by `tests/e2e` since stage 10 (CSP enforcement as the browser implements it, `__Host-` cookie handling, framing: [ui.md](ui.md)); this suite asserts the headers and does not drive a browser, denial of service beyond the lite cases above, anything that needs more than one replica, attacks on the host or the container runtime, social engineering, and attacks on Keycloak's own code beyond its configuration. See `docs/accepted-risks.md` and the "Not verified" lists in `docs/hardening.md` and `docs/asvs.md`.

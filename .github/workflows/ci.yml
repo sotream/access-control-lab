@@ -95,7 +95,7 @@ jobs:
 
 
   attack-tests:
-    # The black-box attack suite (docs/attack-catalogue.md): sixty scripted attacks and a fuzzer against the prod-like stack through its proxy, as an attacker with
+    # The black-box attack suite (docs/attack-catalogue.md): the catalogued scripted attacks and a fuzzer against the prod-like stack through its proxy, as an attacker with
     # network access and the seed users' accounts. The OWASP ZAP baseline runs first, on the fresh stack (the hostile text the other attacks store would otherwise be
     # reported as a finding), then everything else on the same stack. Fixed fuzz seed (printed); the nightly workflow uses a random one.
     runs-on: ubuntu-latest

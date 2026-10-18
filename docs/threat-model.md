@@ -185,7 +185,7 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 - Policy: `docs/policy.md`. Break-glass and the 404-vs-403 rule are decisions recorded there and in ADR-9.
 - **Accepted risk: no token revocation (T-04, T-21 residual).** A stolen access token works until it expires (<= 5 min); a retired signing key until the JWKS cache
   refreshes (<= 10 min). Upgrade path when this is no longer acceptable: for SECRET reads, introspect the token at Keycloak (or check `sid` against a revocation
-  list fed by Keycloak back-channel logout) before allowing; keep ordinary reads on local validation. Not built; owner decision 2026-10-17.
+  list fed by Keycloak back-channel logout) before allowing; keep ordinary reads on local validation. Not built: accepted risk AR-02 (`docs/accepted-risks.md`).
 - Failed-authentication limiter and general throttle are per process and keyed on the socket address (ceiling: single instance, API reachable only from the BFF).
   Multi-instance needs a shared store and a trusted-proxy policy (stage 8).
 - Check/use race: closed in stage 5 (T-35): load, decide and write in one transaction on a locked row.
@@ -229,7 +229,7 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 
 - Compose stack runs Keycloak in `start-dev` over plain HTTP. Loopback-bound only. Not a deployment model. (T-34)
 - Image tags and library versions are chosen by what resolved at scaffold time; not independently verified against advisories. **(unverified)**
-- File storage component has no implementation yet; its threats are placeholders until stage 5/8.
+- File storage was a placeholder at stage 1; it is built (attachments, T-28 to T-31, ADR-21).
 
 ## Stage 10 notes
 

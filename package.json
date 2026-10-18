@@ -7,7 +7,7 @@
     "pnpm": ">=12"
   },
   "scripts": {
-    "lint": "eslint . && node scripts/check-invisible-chars.mjs && node scripts/check-trivyignore.mjs && node scripts/check-zap-allow.mjs && node scripts/check-threat-coverage.mjs",
+    "lint": "eslint . && node scripts/check-invisible-chars.mjs && node scripts/check-trivyignore.mjs && node scripts/check-zap-allow.mjs && node scripts/check-threat-coverage.mjs && node scripts/count-asvs.mjs && node scripts/check-docs.mjs && node scripts/check-mermaid.mjs",
     "typecheck": "pnpm --filter @acl/audit --filter @acl/netguard build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
@@ -17,11 +17,17 @@
     "db:seed": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api seed",
     "test:bff": "pnpm --filter '@acl/web...' build && pnpm --filter @acl/bff-tests test:bff",
     "audit:verify": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:verify",
-    "audit:checkpoint": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:checkpoint"
+    "audit:checkpoint": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:checkpoint",
+    "test:attack": "pnpm --filter @acl/attack-tests test:attack",
+    "test:e2e": "pnpm --filter @acl/e2e-tests test:e2e",
+    "dev:api": "pnpm --filter '@acl/api...' build && node --env-file=.env apps/api/dist/main.js",
+    "dev:web": "pnpm --filter @acl/web dev"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "eslint": "^10.13.0",
+    "jsdom": "30.1.3",
+    "mermaid": "11.17.2",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.5"
