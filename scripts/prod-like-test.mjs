@@ -99,7 +99,7 @@ await check("every service is up and the ones with healthchecks are healthy", ()
 });
 
 await check("containers: no process runs as root, read-only root filesystem, all capabilities dropped (only the listed ones back), no-new-privileges, memory and pids limited", () => {
-  const allowedAdd = { caddy: ["NET_BIND_SERVICE"] };
+  const allowedAdd = {}; // no service gets any capability back
   for (const s of SERVICES) {
     const c = JSON.parse(sh("docker", ["inspect", idOf(s)]))[0];
     const h = c.HostConfig;

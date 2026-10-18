@@ -40,10 +40,13 @@ secrets:
 services:
   caddy:
     <<: *hardened
-    image: caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f # checked 2026-10-18
+    build: { context: ., dockerfile: Dockerfile.caddy } # Caddy built with a patched Go toolchain (the stock image had fixable HIGH findings, docs/deployment.md)
+    image: casefile-caddy:prod-like
     user: "65532:65532"
-    # the proxy listens on 443 as a non-root user (the BFF and the API reach the identity provider by its public name on that port): the one capability it needs
-    cap_add: [NET_BIND_SERVICE]
+    # the proxy listens on 443 as a non-root user (the BFF and the API reach the identity provider by its public name on that port): lowering the
+    # unprivileged-port floor inside the container's own network namespace replaces the capability NET_BIND_SERVICE, so no capability is added back at all
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     ports:
       - "127.0.0.1:443:443"
     networks:
