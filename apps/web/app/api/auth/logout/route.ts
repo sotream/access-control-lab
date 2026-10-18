@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { config } from "../../../../src/server/config";
 import { requireCsrfSession } from "../../../../src/server/guard";
-import { cookieAttrs, parseCookies, preAuthCookieName, sessionCookieName } from "../../../../src/server/cookies";
+import { cookieAttrs, preAuthCookieName, sessionCookieName } from "../../../../src/server/cookies";
 import { sessionStore } from "../../../../src/server/session";
 import { client, oidc, postLogoutUri } from "../../../../src/server/oidc";
 

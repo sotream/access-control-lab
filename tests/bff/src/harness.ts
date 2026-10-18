@@ -2,7 +2,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { createApp } from "../../../apps/api/src/app.js";
 import { loadConfig } from "../../../apps/api/src/config.js";

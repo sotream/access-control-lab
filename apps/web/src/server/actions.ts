@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { config } from "./config";
-import { apiFetch, ProxyRefused, type ApiResult } from "./api";
+import { ProxyRefused, type ApiResult } from "./api";
 import { requireCsrfSession } from "./guard";
 import type { Session } from "./session-store";
 
