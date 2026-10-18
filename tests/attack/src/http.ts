@@ -51,7 +51,7 @@ export function request(host: string, path: string, o: ReqOpts = {}): Promise<Re
     const headers: Record<string, string | string[]> = { host, ...(o.headers ?? {}) };
     if (o.jar?.cookies.size) headers.cookie = o.jar.header();
     if (o.body !== undefined && headers["content-length"] === undefined && !Object.keys(headers).some((k) => k.toLowerCase() === "transfer-encoding")) headers["content-length"] = String(Buffer.byteLength(o.body));
-    const req = https.request({ host: "127.0.0.1", servername: host, port: 443, path, method: o.method ?? "GET", headers, lookup: (_n, _o, cb) => cb(null, "127.0.0.1", 4), timeout: o.timeoutMs ?? 60_000 }, (res) => {
+    const req = https.request({ host: "127.0.0.1", servername: host, port: 443, path, method: o.method ?? "GET", headers, lookup: (_n, _o, cb) => cb(null, "127.0.0.1", 4), timeout: o.timeoutMs ?? 60_000, agent: false /* one connection per request: a server may answer early and leave a body unread */ }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {

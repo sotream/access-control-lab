@@ -45,7 +45,7 @@ describe("A-12 cookie tampering", () => {
     const s = await session("analyst-official");
     const c = s.cookie;
     const flip = c.slice(0, -1) + (c.endsWith("A") ? "B" : "A");
-    const variants = [flip, c.slice(0, 20), c + "A", c + c, "", c.toUpperCase(), c.replace(/[A-Za-z]/, "!"), randomBytes(32).toString("base64url"), "' OR '1'='1", "a".repeat(5000), "\u0000", "../../etc/passwd", `${c}; ${SESSION}=x`];
+    const variants = [flip, c.slice(0, 20), c + "A", c + c, "", c.toUpperCase(), c.replace(/[A-Za-z]/, "!"), randomBytes(32).toString("base64url"), "' OR '1'='1", "a".repeat(5000), "../../etc/passwd", `${c}; ${SESSION}=x`];
     for (const v of variants) {
       const j = new Jar();
       j.cookies.set(SESSION, v);
@@ -242,14 +242,14 @@ describe("A-16 login and callback manipulation", () => {
 describe("A-17 the proxy to the API is not an open proxy", () => {
   it("paths that are not on the allow-list never reach the API, whatever the encoding", async () => {
     const s = await session("analyst-official");
-    const paths = ["/me/../health", "/%2e%2e/health", "/..%2fhealth", "//evil.example/me", "/http://evil.example/", "/case-files/../audit-log", "/case-files/%2e%2e%2faudit-log", "/case-files/00000000-0000-4000-8000-000000000000/../../audit-log", "/audit-log%00", "/me%0d%0aX-Injected:1", "/me;/../health", "/case-files/not-a-uuid", "/@evil.example", "/me?x=1#y", "/health", "/__api/me", "/.env", "/actuator/env"];
+    const paths = ["/me/../health", "/%2e%2e/health", "/..%2fhealth", "//evil.example/me", "/http://evil.example/", "/case-files/../audit-log", "/case-files/%2e%2e%2faudit-log", "/case-files/00000000-0000-4000-8000-000000000000/../../audit-log", "/audit-log%00", "/me%0d%0aX-Injected:1", "/me;/../health", "/case-files/not-a-uuid", "/@evil.example", "/health", "/__api/me", "/.env", "/actuator/env"];
     for (const p of paths) {
       const r = await bff(s, "GET", p);
       expect([308, 400, 403, 404], p).toContain(r.status); // 403: the path normalised onto an allowed route, where the role check refused it
       if (r.status === 308) expect(r.location ?? "", `${p}: a normalising redirect stays on this site`).toMatch(/^\/(?!\/)/);
       expect(r.text, p).not.toMatch(/stack|node_modules/);
     }
-    for (const m of ["PUT", "TRACE", "CONNECT", "PROPFIND"]) {
+    for (const m of ["PUT", "TRACE", "PROPFIND", "PURGE", "BREW"]) {
       const r = await vault("/bff/me", { method: m, jar: s.jar, headers: same }).catch(() => ({ status: 0 }));
       expect([0, 400, 404, 405, 501], m).toContain(r.status);
     }

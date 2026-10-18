@@ -76,7 +76,8 @@ describe("A-40 hostile content is turned away and leaves nothing behind", () => 
 
 describe("A-41 the EICAR file is quarantined, never served, and visible only as a status", () => {
   it("the row says quarantined, the list shows it without a link, the download refuses it", async () => {
-    await upload(owner, caseId, { name: "eicar-visible.txt", type: "text/plain", bytes: EICAR });
+    const up = await upload(owner, caseId, { name: "eicar-visible.txt", type: "text/plain", bytes: EICAR });
+    expect(msg(up), `upload answered ${up.status} ${up.location} ${up.text.slice(0, 200)}`).toBe("rejected");
     const row = rows(caseId).find((x) => x.startsWith("eicar-visible.txt"));
     expect(row).toMatch(/\|quarantined\|.*Eicar/i);
     const list = (await bff(owner, "GET", `/case-files/${caseId}/attachments`)).json as { id: string; name: string; status: string }[];
