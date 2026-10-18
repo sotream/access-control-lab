@@ -190,11 +190,11 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
+      # the status LINE of /health/ready decides (200 only when ready): the body of a DOWN answer still contains sub-checks that say "UP"
       test:
         - CMD-SHELL
         - >-
           exec 3<>/dev/tcp/127.0.0.1/9000 &&
-          # the status LINE decides (200 only when ready); the body of a DOWN answer still contains sub-checks that say "UP"
           printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
           head -n 1 <&3 | grep -q ' 200 '
       interval: 10s
