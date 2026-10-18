@@ -1,0 +1,11 @@
+# TEST ONLY (docker-compose.prod-like.test.yml): the API is not reachable from outside in the prod-like stack. The attack suite models an attacker with a foothold on the
+# internal network (a compromised container, a sidecar, an SSRF gadget) by exposing it here under /__api WITHOUT any of the BFF's protections: the API must defend itself.
+handle /__api/* {
+	uri strip_prefix /__api
+	reverse_proxy api-lax:3001
+}
+# the real API with its production rate limits, for the attacks on the limiter itself
+handle /__api-strict/* {
+	uri strip_prefix /__api-strict
+	reverse_proxy api:3001
+}

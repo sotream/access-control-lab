@@ -39,6 +39,9 @@
 https://vault.localhost {
 	tls /certs/tls.crt /certs/tls.key
 	import secure_headers
+	# methods this application uses; anything else (TRACE, CONNECT, WebDAV verbs) stops here (Next.js answers a TRACE with a 500)
+	@unknown_method not method GET HEAD POST PUT PATCH DELETE OPTIONS
+	respond @unknown_method "Method Not Allowed" 405
 	request_body {
 		max_size 6MB
 	}
@@ -53,6 +56,8 @@ https://vault.localhost {
 https://id.localhost {
 	tls /certs/tls.crt /certs/tls.key
 	import secure_headers
+	@unknown_method not method GET HEAD POST OPTIONS
+	respond @unknown_method "Method Not Allowed" 405
 	@public path /realms/casefile /realms/casefile/* /resources/* /robots.txt
 	handle @public {
 		reverse_proxy keycloak:8080 {

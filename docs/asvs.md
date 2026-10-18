@@ -2,7 +2,9 @@
 
 A mapping of the requirements that apply to this system to a status and to the test or file that proves it, and an honest list of what is **not met**. Written at the end of stage 8.
 
-**Read this first.**
+**Read this first.** Since stage 9 many rows are also proven from the outside by the black-box attack suite (`docs/attack-catalogue.md`, `tests/attack`); where a row names a unit test, an attack in that catalogue usually exercises the same property end to end.
+
+**Read this first, continued.**
 - Requirement IDs and wording follow ASVS 4.0.3 as the author recalls them; the wording is shortened. The numbering was not diffed against the official CSV: **unverified**. Use the ID as a pointer, not as a citation.
 - Status: **met** (a test or a checked artefact proves it), **partial** (some of it, the gap is stated), **delegated** (Keycloak or the platform provides it; what we configured is stated, and "unverified" when not tested), **n/a** (does not apply, with the reason), **not met**.
 - "Proof" names a file in this repository. A claim without proof says so. This is a self-assessment by the people who built the system, not an audit.

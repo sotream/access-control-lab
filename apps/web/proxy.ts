@@ -6,6 +6,12 @@ import { NextResponse, type NextRequest } from "next/server";
  * No 'unsafe-inline', no 'unsafe-eval' in production (development needs eval for React's debug stacks), no third-party origins.
  */
 export function proxy(request: NextRequest) {
+  // a path with a percent-escape that is not valid UTF-8 (/cases/%ff%fe) makes Next.js's own routing throw and answer 500: a client error is a 400
+  try {
+    decodeURIComponent(new URL(request.url).pathname);
+  } catch {
+    return new NextResponse("Bad Request", { status: 400, headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+  }
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const dev = process.env.NODE_ENV === "development";
   const hsts = process.env.HSTS_ENABLED === "true";

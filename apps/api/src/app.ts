@@ -8,6 +8,7 @@ import { ErrorFilter } from "./http/error-filter.js";
 import { JsonLogger } from "./http/logger.js";
 import type { Clock } from "./policy/policy.enforcer.js";
 import { requestContext } from "./http/request-context.js";
+import { rejectPollutingKeys } from "./http/no-pollution.js";
 
 /** The one place the HTTP hardening is applied, so tests exercise exactly what production runs. */
 export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; extraControllers?: Type[]; extraProviders?: Provider[]; clock?: Clock } = {}) {
@@ -39,6 +40,7 @@ export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; ext
   });
   app.useBodyParser("json", { limit: cfg.bodyLimit });
   app.useBodyParser("raw", { type: "application/octet-stream", limit: cfg.attachmentMaxBytes }); // attachments only: bytes, never parsed
+  app.use(rejectPollutingKeys);
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, forbidUnknownValues: true, transform: false }),
   );

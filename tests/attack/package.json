@@ -1,0 +1,15 @@
+{
+  "name": "@acl/attack-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:attack": "node ../../scripts/prod-like-setup.mjs && NODE_EXTRA_CA_CERTS=$PWD/../../secrets-dev/prod-like/ca.crt vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "fast-check": "4.10.2",
+    "vitest": "5.0.5"
+  }
+}

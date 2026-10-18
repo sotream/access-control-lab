@@ -19,6 +19,19 @@ export type Clock = () => number; // epoch milliseconds
 
 const BREAK_GLASS_HEADER = "x-break-glass-justification";
 const ZONE_HEADER = "x-acl-zone";
+
+/**
+ * An HTTP header value is Latin-1 on the wire, a justification may be in any script: the BFF sends it percent-encoded (UTF-8). A value that is not valid
+ * percent-encoding (a direct caller's plain text with a literal %) is used as it is.
+ */
+function decodedHeader(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
 const MAX_JUSTIFICATION = 500;
 
 export const toSubject = (p: Principal): Subject => ({
@@ -72,7 +85,7 @@ export class PolicyEnforcer {
         ? {}
         : // control and bidi characters become spaces, whitespace collapses: the cleaned text is what the policy, the database context and the audit row all see.
           // A header that is empty after cleaning stays an (empty) request, which the policy refuses.
-          { breakGlass: { justification: sanitizeText(Array.isArray(header) ? header.join(", ") : header, MAX_JUSTIFICATION) ?? "" } }),
+          { breakGlass: { justification: sanitizeText(decodedHeader(Array.isArray(header) ? header.join(", ") : header), MAX_JUSTIFICATION) ?? "" } }),
     };
   }
 
