@@ -126,7 +126,10 @@ describe("break-glass with real tokens", () => {
     expect(direct.status).toBe(404);
     const form = await b.req(`/cases/${ids["hostile"]}/break-glass`);
     expect(form.status).toBe(200);
-    const r = await b.post(`/actions/case-files/${ids["hostile"]}/break-glass`, { csrf: csrfOf(form.text), justification: "incident 4711 " + XSS });
+    const posted = await b.post(`/actions/case-files/${ids["hostile"]}/break-glass`, { csrf: csrfOf(form.text), justification: "incident 4711 " + XSS });
+    expect(posted.status).toBe(303); // the audited read happens on the result page; the justification travels in a short-lived cookie, never in the URL
+    expect(posted.location).not.toContain("incident");
+    const r = await b.req(posted.location!.replace(WEB, ""));
     expect(r.status).toBe(200);
     expect(r.text).toContain("This access was recorded");
     expect(r.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
@@ -140,10 +143,13 @@ describe("break-glass with real tokens", () => {
     const b = new Browser();
     await b.login("unit-admin-beta");
     const form = csrfOf((await b.req(`/cases/${ids["hostile"]}/break-glass`)).text);
-    expect((await b.post(`/actions/case-files/${ids["hostile"]}/break-glass`, { csrf: form, justification: "    " })).status).toBe(400);
+    const blank = await b.post(`/actions/case-files/${ids["hostile"]}/break-glass`, { csrf: form, justification: "    " });
+    expect(blank.status).toBe(303);
+    expect(blank.location).toMatch(/\/break-glass\?e=short$/);
     const a = new Browser();
     await a.login("analyst-official");
-    const r = await a.post(`/actions/case-files/${ids["hostile"]}/break-glass`, { csrf: csrfOf((await a.req(`/cases/${ids["official"]}/break-glass`)).text), justification: "I would like to read this please" });
+    const posted = await a.post(`/actions/case-files/${ids["hostile"]}/break-glass`, { csrf: csrfOf((await a.req(`/cases/${ids["official"]}/break-glass`)).text), justification: "I would like to read this please" });
+    const r = await a.req(posted.location!.replace(WEB, ""));
     expect(r.status).toBe(404);
     expect(r.text).not.toContain("alert(1)");
   });

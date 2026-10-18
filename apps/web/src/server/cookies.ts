@@ -2,6 +2,8 @@ import { config } from "./config";
 
 /** `__Host-` needs Secure, Path=/ and no Domain: it pins the cookie to this exact host and blocks overwrites from sibling subdomains. */
 export const sessionCookieName = (): string => (config().cookieSecure ? "__Host-casefile_session" : "casefile_session");
+export const themeCookieName = (): string => (config().cookieSecure ? "__Host-casefile_theme" : "casefile_theme");
+export const breakGlassCookieName = (): string => (config().cookieSecure ? "__Host-casefile_bg" : "casefile_bg");
 export const preAuthCookieName = (): string => (config().cookieSecure ? "__Host-casefile_pre" : "casefile_pre");
 
 export interface CookieAttrs {

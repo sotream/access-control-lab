@@ -33,6 +33,7 @@ export function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname); // for the navigation highlight; set here, so a client-sent value never gets through
   requestHeaders.set("content-security-policy", csp);
 
   const res = NextResponse.next({ request: { headers: requestHeaders } });

@@ -1,5 +1,5 @@
 // return-to handling: only same-origin paths that the application itself serves, query and fragment dropped.
-const ALLOWED = [/^\/$/, /^\/session$/, /^\/cases$/, /^\/cases\/new$/, /^\/cases\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/break-glass)?$/];
+const ALLOWED = [/^\/$/, /^\/session$/, /^\/cases$/, /^\/cases\/new$/, /^\/review$/, /^\/audit$/, /^\/audit\/verify$/, /^\/break-glass$/, /^\/cases\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/break-glass)?$/];
 const DEFAULT = "/";
 // control characters (including NUL), DEL, backslash, and any scheme-like or protocol-relative start
 const FORBIDDEN = /[\u0000-\u001f\u007f\\]/;

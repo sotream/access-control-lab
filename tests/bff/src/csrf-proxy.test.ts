@@ -301,7 +301,10 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
   it("break-glass: the justification header goes upstream only from the dedicated route", async () => {
     reset();
     const form = csrfOf((await b.req(`/cases/${ID}/break-glass`)).text);
-    const r = await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: "incident 4711 <b>x</b>" });
+    const posted = await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: "incident 4711 <b>x</b>" });
+    expect(posted.status).toBe(303);
+    expect(seen).toHaveLength(0); // the POST itself calls nothing upstream; the result page does the read
+    const r = await b.req(posted.location!.replace(WEB, ""));
     expect(r.status).toBe(200);
     expect(seen).toHaveLength(1);
     expect(seen[0]!.url).toBe(FILE);
@@ -320,7 +323,11 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
   it("a short or blank justification is refused before the upstream is called", async () => {
     reset();
     const form = csrfOf((await b.req(`/cases/${ID}/break-glass`)).text);
-    for (const j of ["", "   ", "abcd"]) expect((await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: j })).status).toBe(400);
+    for (const j of ["", "   ", "abcd"]) {
+      const r = await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: j });
+      expect(r.status).toBe(303);
+      expect(r.location).toMatch(/\?e=short$/);
+    }
     expect(seen).toHaveLength(0);
   });
 });
