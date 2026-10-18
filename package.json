@@ -19,7 +19,9 @@
     "audit:verify": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:verify",
     "audit:checkpoint": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:checkpoint",
     "test:attack": "pnpm --filter @acl/attack-tests test:attack",
-    "test:e2e": "pnpm --filter @acl/e2e-tests test:e2e"
+    "test:e2e": "pnpm --filter @acl/e2e-tests test:e2e",
+    "dev:api": "pnpm --filter '@acl/api...' build && node --env-file=.env apps/api/dist/main.js",
+    "dev:web": "NODE_OPTIONS=--env-file=$PWD/.env pnpm --filter @acl/web dev"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
