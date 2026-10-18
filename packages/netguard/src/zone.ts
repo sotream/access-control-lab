@@ -25,7 +25,7 @@ export function parseZoneKeys(spec: string): ZoneKeys {
   return { currentId: first, keys };
 }
 
-const mac = (key: Buffer, ts: number, zone: Zone, sub: string): Buffer => createHmac("sha256", key).update(`acl-zone/v1\n${ts}\n${zone}\n${sub}`).digest();
+const mac = (secret: Buffer, ts: number, zone: Zone, subject: string): Buffer => createHmac("sha256", secret).update(`acl-zone/v1\n${ts}\n${zone}\n${subject}`).digest();
 
 /**
  * `v1.<keyId>.<unix seconds>.<zone>.<mac>`: only the holder of a key can produce it, it names the subject it was made for (a header copied

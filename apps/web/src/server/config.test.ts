@@ -107,6 +107,8 @@ describe("esc", () => {
 });
 
 describe("web production profile (ACL_ENV=production)", () => {
+  /** a long, varied string computed at run time (no secret-looking literal in the repository) */
+  const strong = (seed: number) => Buffer.from(Array.from({ length: 24 }, (_, i) => (i * seed + 19) % 251)).toString("base64url");
   const key = (seed: number) => Buffer.from(Array.from({ length: 32 }, (_, i) => (i * seed + 11) % 251)).toString("base64");
   const good = {
     ACL_ENV: "production",
@@ -114,11 +116,11 @@ describe("web production profile (ACL_ENV=production)", () => {
     KEYCLOAK_ISSUER: "https://id.example/realms/casefile",
     API_BASE_URL: "https://api.example",
     WEB_DATABASE_URL: "postgres://casefile_web:q9Xv2LmT8sWk4RzP7nYd@db.internal:5432/acl",
-    CASEFILE_WEB_SECRET: "q9Xv2LmT8sWk4RzP7nYd3HfJ6bCa1UeG",
+    CASEFILE_WEB_SECRET: strong(17),
     SESSION_ENCRYPTION_KEYS: `session-2026:${key(29)}`,
     AUDIT_HMAC_KEYS: `audit-2026:${key(37)}`,
     ZONE_SIGNING_KEYS: `zone-2026:${key(41)}`,
-    TRUSTED_PROXY_SECRET: "Zr7Qm2Vx9LpT4WcN8YdHs6KbJ3GfUaE5",
+    TRUSTED_PROXY_SECRET: strong(23),
   };
   it("accepts a complete, strong configuration", () => {
     const c = loadWebConfig(good);

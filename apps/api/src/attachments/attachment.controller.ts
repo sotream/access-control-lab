@@ -23,8 +23,9 @@ export class AttachmentsController {
   @Policy({ action: "update", resource: ExistingCaseFileLoader })
   @Post()
   upload(@Param("id") id: string, @Req() req: AppRequest): Promise<AttachmentView> {
-    if (!Buffer.isBuffer(req.body) || (req.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase() !== "application/octet-stream") throw new UnsupportedMediaTypeException();
-    return this.attachments.upload(callerOf(req), id, req.body, header(req, "x-attachment-type"), decodeNameHeader(header(req, "x-attachment-name")));
+    const body: unknown = req.body;
+    if (!Buffer.isBuffer(body) || (req.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase() !== "application/octet-stream") throw new UnsupportedMediaTypeException();
+    return this.attachments.upload(callerOf(req), id, Buffer.from(body), header(req, "x-attachment-type"), decodeNameHeader(header(req, "x-attachment-name")));
   }
 
   @Policy({ action: "read", resource: ExistingCaseFileLoader })
