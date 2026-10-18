@@ -10,6 +10,11 @@ export interface ResourceLoader {
   readonly existing: boolean;
   /** `undefined`: no such resource. Input from the request is untrusted; validate before querying. */
   load(req: AppRequest): Promise<Resource | undefined>;
+  /**
+   * Called when `load` found nothing: would the resource be visible if the caller had authenticated with MFA?
+   * If so the caller is cleared for it and gets the step-up challenge instead of 404. Optional.
+   */
+  revealedByStepUp?(req: AppRequest): Promise<boolean>;
 }
 
 /** `null`: no resource (lists, audit, user management); only the role is checked, the handler must filter rows. */

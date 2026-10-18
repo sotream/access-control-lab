@@ -1,8 +1,9 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
-import { evaluate, evaluateRole, visibility, type Decision, type Environment, type Resource, type Subject } from "@acl/policy";
+import { evaluate, evaluateRole, type Decision, type Environment, type Resource, type Subject } from "@acl/policy";
 import { CONFIG, type AppConfig } from "../config.js";
 import { StepUpRequired } from "../http/errors.js";
+import { refusalFor } from "./refusal.js";
 import { JsonLogger } from "../http/logger.js";
 import type { AppRequest } from "../http/request.js";
 import type { Access, ResourceLoader } from "../auth/access.js";
@@ -67,6 +68,11 @@ export class PolicyEnforcer {
       resource = await loader.load(req);
       if (resource === undefined) {
         // same refusal as a hidden resource: nonexistent and forbidden are indistinguishable to the client
+        // unless the only thing in the way is MFA for a file this subject is cleared for (the loader can tell)
+        if (loader.revealedByStepUp && (await loader.revealedByStepUp(req))) {
+          this.log(req, p, access.action, undefined, "deny", "STEP_UP_REQUIRED", ["abac.step-up"], ["step-up"]);
+          throw new StepUpRequired("mfa");
+        }
         this.log(req, p, access.action, undefined, "deny", "RESOURCE_NOT_FOUND", ["resource.not-found"], []);
         throw new NotFoundException();
       }
@@ -77,9 +83,7 @@ export class PolicyEnforcer {
     if (decision.effect === "allow") return;
 
     // 404 vs 403: a subject who may not even read the resource is told it does not exist
-    if (existing && resource && visibility(subject, resource, env) === "hidden") throw new NotFoundException();
-    if (decision.reason === "STEP_UP_REQUIRED") throw new StepUpRequired("mfa");
-    throw new ForbiddenException();
+    throw refusalFor(decision, existing, resource, subject, env);
   }
 
   private log(

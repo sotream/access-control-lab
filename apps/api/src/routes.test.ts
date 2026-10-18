@@ -1,10 +1,9 @@
-import { Controller, Get, RequestMethod, type Type } from "@nestjs/common";
-import { PATH_METADATA, METHOD_METADATA } from "@nestjs/common/constants";
-import { ModulesContainer, Reflector } from "@nestjs/core";
+import { Controller, Get, RequestMethod } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { JwksServer, bearer, boot, get, goodClaims, makeKey, sign, type Booted, type TestKey } from "../test/harness.js";
+import { JwksServer, bearer, boot, get, goodClaims, makeKey, sign, type TestKey } from "../test/harness.js";
 import { FIXTURE } from "../test/casefile-fixture.js";
-import { ACCESS_KEY, type Access, Policy } from "./auth/access.js";
+import { enumerate } from "../test/inventory.js";
+import { Policy } from "./auth/access.js";
 
 // A route someone "forgot" to declare access on. The suite must see it and the guard must deny it.
 @Controller("forgotten")
@@ -13,36 +12,6 @@ class ForgottenController {
   get() {
     return { leaked: true };
   }
-}
-
-interface RouteInfo {
-  method: number;
-  path: string;
-  access: Access | undefined;
-}
-
-/** Walks every controller method that carries a route and reads its declared access. */
-function enumerate(app: Booted["app"]): RouteInfo[] {
-  const reflector = new Reflector();
-  const out: RouteInfo[] = [];
-  for (const mod of app.get(ModulesContainer).values()) {
-    for (const wrapper of mod.controllers.values()) {
-      const ctor = wrapper.metatype as Type | null;
-      if (!ctor) continue;
-      const base = Reflect.getMetadata(PATH_METADATA, ctor) as string;
-      for (const name of Object.getOwnPropertyNames(ctor.prototype).filter((n) => n !== "constructor")) {
-        const handler = ctor.prototype[name] as (...a: never[]) => unknown;
-        const path = Reflect.getMetadata(PATH_METADATA, handler) as string | undefined;
-        if (typeof handler !== "function" || path === undefined) continue;
-        out.push({
-          method: Reflect.getMetadata(METHOD_METADATA, handler) as number,
-          path: `/${base}/${path}`.replace(/\/+/g, "/").replace(/\/$/, "") || "/",
-          access: reflector.getAllAndOverride<Access | undefined>(ACCESS_KEY, [handler, ctor]),
-        });
-      }
-    }
-  }
-  return out;
 }
 
 describe("default deny and route inventory (T-11)", () => {

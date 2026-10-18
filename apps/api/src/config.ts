@@ -18,6 +18,9 @@ export interface AppConfig {
   /** client addresses (as seen on the socket) that count as the managed network zone; empty means none */
   managedAddresses: readonly string[];
   corsOrigins: readonly string[];
+  /** postgres connection string of the application role; absent: the data layer is not mounted */
+  databaseUrl: string | undefined;
+  dbPoolMax: number;
   bodyLimit: string;
   /** general rate limit: requests per window per client address */
   throttleLimit: number;
@@ -56,6 +59,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
 
   const managed = list(env, "MANAGED_ADDRESSES", "");
   for (const a of managed) if (!/^[0-9a-fA-F:.]{2,45}$/.test(a)) throw new Error(`MANAGED_ADDRESSES entry not an IP address: ${a}`);
+  const databaseUrl = env.DATABASE_URL || undefined;
+  if (databaseUrl !== undefined && !/^postgres(ql)?:\/\//.test(databaseUrl)) throw new Error("DATABASE_URL must be a postgres:// URL");
   const corsOrigins = list(env, "CORS_ORIGINS", "");
   for (const o of corsOrigins) {
     if (o === "*" || !/^https?:\/\/[^/*]+$/.test(o)) throw new Error(`CORS_ORIGINS entry not an exact origin: ${o}`);
@@ -71,6 +76,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
     jwksMaxAgeMs: int(env, "JWKS_MAX_AGE_MS", 600_000, 1_000, 86_400_000),
     managedAddresses: list(env, "MANAGED_ADDRESSES", ""),
     corsOrigins,
+    databaseUrl,
+    dbPoolMax: int(env, "DB_POOL_MAX", 10, 1, 50),
     bodyLimit: env.BODY_LIMIT ?? "64kb",
     throttleLimit: int(env, "THROTTLE_LIMIT", 120, 1, 100_000),
     throttleWindowMs: int(env, "THROTTLE_WINDOW_MS", 60_000, 1_000, 3_600_000),
