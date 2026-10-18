@@ -66,7 +66,7 @@ for (const m of MUTANTS) {
     if (failed) throw new Error(failed);
     const t = run("pnpm", ["--filter", "@acl/attack-tests", "exec", "vitest", "run", ...m.tests.map((x) => `src/${x}`)], { env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0", ATTACK_NO_UP: "1", NODE_EXTRA_CA_CERTS: join(root, "secrets-dev/prod-like/ca.crt") } });
     const plain = `${t.stdout}\n${t.stderr}`.replace(/\u001b\[[0-9;]*m/g, "");
-    const summary = /Tests\s+(.*)/.exec(plain)?.[1]?.trim() ?? `no summary; last lines: ${plain.trim().split("\n").slice(-6).join(" | ").slice(0, 400)}`;
+    const summary = /Tests\s+(.*)/.exec(plain)?.[1]?.trim() ?? `no summary; ${plain.split("\n").filter((l) => /FAIL|Error|×|✗|❯/.test(l) && !/ERR_PNPM|pnpm recursive/.test(l)).slice(0, 8).join(" | ").slice(0, 700)}`;
     outcome = { verdict: t.status === 0 ? "SURVIVED" : "killed", summary };
   } catch (e) {
     outcome = { verdict: "ERROR", summary: String(e.message) };
