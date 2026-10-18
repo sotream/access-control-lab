@@ -87,6 +87,7 @@ jobs:
           DEV_TOTP_SECRET: x
           CASEFILE_MIGRATOR_PASSWORD: x
           CASEFILE_APP_PASSWORD: x
+          CASEFILE_WEB_DB_PASSWORD: x
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.refs.outputs.keycloak }}
