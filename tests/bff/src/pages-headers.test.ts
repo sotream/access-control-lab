@@ -27,7 +27,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-const scripts = (html: string) => [...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
+const scripts = (html: string) => [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);
 
 describe("the functional pages (no design, plain HTML)", () => {
   it("unauthenticated visitors are sent to sign in and come back to the page they wanted", async () => {
@@ -130,7 +130,7 @@ describe("break-glass with real tokens", () => {
     expect(r.status).toBe(200);
     expect(r.text).toContain("This access was recorded");
     expect(r.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
-    expect(r.text).not.toContain("<script>alert");
+    expect(r.text).not.toMatch(/<script>alert/i);
     expect(r.text).not.toMatch(/<img[^>]*onerror/i);
     expect(api.logs.some((l) => l.includes("break_glass_alert") && l.includes("incident 4711"))).toBe(true);
     expect((await b.req(`/cases/${ids["hostile"]}`)).status).toBe(404); // nothing was opened for later
@@ -160,7 +160,7 @@ describe("stored XSS renders inert (T-07)", () => {
       const r = await b.req(path);
       expect(r.status).toBe(200);
       expect(r.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
-      expect(r.text).not.toMatch(/<script>alert/);
+      expect(r.text).not.toMatch(/<script>alert/i);
       expect(r.text).not.toMatch(/<img[^>]*onerror/i);
       expect(r.text).not.toMatch(/<svg[^>]*onload/i);
       // every script tag is ours: external with src or carrying the nonce
@@ -178,7 +178,7 @@ describe("stored XSS renders inert (T-07)", () => {
     const r = await b.req(`/cases/${ids["hostile"]}`);
     expect(r.status).toBe(200);
     expect(r.text).toContain("&lt;script&gt;");
-    expect(r.text).not.toMatch(/<script>alert/);
+    expect(r.text).not.toMatch(/<script>alert/i);
   });
 });
 
@@ -248,7 +248,7 @@ describe("security headers (T-07, T-31)", () => {
     const tags = scripts(a.text);
     expect(tags.length).toBeGreaterThan(0);
     for (const t of tags) expect(t).toContain(`nonce="${n(a)}"`);
-    expect(a.text).not.toMatch(/<script(?![^>]*\bnonce=)(?![^>]*\bsrc=)[^>]*>/); // no inline script without a nonce
+    expect(a.text).not.toMatch(/<script(?![^>]*\bnonce=)(?![^>]*\bsrc=)[^>]*>/i); // no inline script without a nonce
     expect(a.text).not.toMatch(/\son[a-z]+="/i); // no inline event handlers
   });
 
