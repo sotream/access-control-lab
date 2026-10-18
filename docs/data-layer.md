@@ -88,6 +88,56 @@ pnpm db:seed         # dev only, as the superuser, refuses non-local databases
 pnpm test:db         # DB tests against <POSTGRES_DB>_test (migrations applied by the suite itself)
 ```
 
+## Mutation check (by hand, against the database)
+
+Each change below was applied alone to the migration in a scratch database and the suites roles, rls, drift, parity and concurrency were run against it
+(`--bail 1`): **all 40 were killed** (at least one test failed). Several are deliberately redundant-layer mutants (for example M39, the unit scope in the UPDATE policy,
+which the trigger also enforces): they are killed anyway because the parity grids include the multi-role subjects that reach the trigger's own check.
+
+- M01 cleared(): no clearance floor
+- M02 cleared(): no need-to-know
+- M03 cleared(): no step-up
+- M04 select: no clearance floor
+- M05 select: no step-up
+- M06 select: no need-to-know
+- M07 break-glass for any role
+- M08 break-glass beats the floor and step-up
+- M09 break-glass beats step-up only
+- M10 break-glass accepts blank justification
+- M11 insert: author not bound to caller
+- M12 insert: any unit
+- M13 insert: no role check
+- M14 insert: no floor/need-to-know/step-up
+- M15 update policy: no floor/need-to-know/step-up (USING)
+- M16 trigger: no unit rule
+- M17 trigger: no separation of duties
+- M18 trigger: submitter may approve
+- M19 trigger: no ownership
+- M20 trigger: no role check
+- M21 trigger: edit after submit
+- M22 delete: any status
+- M23 delete: no ownership
+- M24 delete: no unit scope
+- M25 role_own_only: union semantics inverted
+- M26 grants: reviewer approve not cross-unit
+- M27 grants: analyst submit not own-only
+- M28 grants: unit-admin has no break-glass
+- M29 app_mfa(): no otp in amr
+- M30 app_mfa(): no acr check
+- M31 role_allows(): any role
+- M32 trigger: submitter taken from nowhere
+- M33 trigger: version not bumped
+- M34 ctx marker not required
+- M35 FORCE row security removed
+- M36 grant: UPDATE(classification) added
+- M37 grant: TRUNCATE added
+- M38 trigger: classification mutable
+- M39 update policy: no unit scope (USING; trigger still checks)
+- M40 role_grants readable table replaced: SECURITY DEFINER-free check removed (search_path unpinned on app_mfa)
+
+Application layer (apps/api and e2e) mutants were not repeated for this stage beyond those listed in `docs/policy.md`; the service's authoritative recheck is covered by the
+concurrency and end-to-end tests but **not mutation-tested**.
+
 ## Limits and not verified
 
 - RLS cannot stop code that sets a forged context (it runs as the same role): it covers missing checks, wrong queries and injection. ADR-11.
