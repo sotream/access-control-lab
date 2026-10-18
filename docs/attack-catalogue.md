@@ -92,6 +92,32 @@ Each of these was found by an attack, fixed in the same pull request, and is now
 4. **A break-glass justification with a control character gave a 502, and one in a non-Latin script (Cyrillic, emoji) could never be sent** because an HTTP header is Latin-1; the BFF now cleans it and sends it percent-encoded, the API decodes (A-60).
 5. **`openid-client` could end up as one copy per route bundle**, so a login could fail with "config must be an instance of Configuration" depending on which route ran first; it is now an external package, one instance per process.
 
+## Mutation spot-check of the suite
+
+`scripts/attack-mutation.mjs` (manual workflow `attack-mutation`) breaks 17 defences one at a time, rebuilds what each lives in, runs the attack file that should notice and puts the stack back before the next one. Results, run on the CI runner (about 1.5 hours for all 17):
+
+| ID | Defence broken | Result |
+|----|----------------|--------|
+| M01 | the API checks neither audience nor authorised party of a token | survives, **redundant layers**: the account-console token also lacks the application claims (clearance, unit) the API requires, so it is refused three times over |
+| M02 | the audit list needs only the right to read case files | killed (A-25) |
+| M03 | prototype-pollution and empty keys no longer refused | killed (A-94, A-95, A-24) |
+| M04 | uploads stored without inspecting the bytes | killed (A-40, 11 tests) |
+| M05 | a quarantined or pending attachment can be downloaded | killed (A-41) |
+| M06 | an attachment id works under any readable case file (IDOR) | killed (A-44) |
+| M07 | the BFF's CSRF check always passes | killed (A-14, A-13) |
+| M08 | the session cookie is not HttpOnly | killed (A-12) |
+| M09 | the post-login redirect accepts any returnTo | killed (A-15) |
+| M10 | the callback compares the state with the URL's own instead of the pre-auth cookie's | killed (A-16) |
+| M11 | no rate limit on the login endpoint | killed (A-70) |
+| M12 | the API's failed-authentication budget is off | killed (A-72) |
+| M13 | the generic proxy forwards a break-glass header | killed (A-60) |
+| M14 | the break-glass justification is not cleaned in the API | **survived the first time** (the BFF cleans the text before the API sees it, so every attack through the BFF was blind to it); a test straight at the API was added to A-60; killed |
+| M15 | an invalid percent-escape in a path gives a 500 again | killed (A-80) |
+| M16 | the proxy lets unused methods through | killed (A-76, A-17) |
+| M17 | the policy engine no longer checks the clearance floor | survives, **redundant layer**: row-level security hides the row before the policy is asked (the stage 5 parity tests are what pin the policy itself) |
+
+17 mutants: 15 killed, 2 survive on purpose. Lessons from getting the harness right: a mutant that stays built poisons the next one (the script now restores the stack after each), a rebuild that never reached the running container reports nothing (the script now compares image ids), and a second factor can be refused when two processes sign the same user in within one 30 second step (the login retries with the next step).
+
 ## Not attacked here
 
 Exploits that need a real browser (CSP enforcement as the browser implements it, `__Host-` cookie handling, clickjacking in practice: the headers are asserted, the browser is not driven), denial of service beyond the lite cases above, anything that needs more than one replica, attacks on the host or the container runtime, social engineering, and attacks on Keycloak's own code beyond its configuration. See `docs/accepted-risks.md` and the "Not verified" lists in `docs/hardening.md` and `docs/asvs.md`.
