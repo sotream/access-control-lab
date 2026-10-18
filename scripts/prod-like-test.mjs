@@ -279,6 +279,10 @@ await check("through the real proxy a client cannot choose its rate-limit bucket
   assert(codes.slice(first).every((c) => c === 429) && codes.slice(0, first).every((c) => c === 303), `pattern: ${codes}`);
 });
 
+if (failed > 0) {
+  // the stack is removed below: keep the evidence of a failure in the output
+  for (const svc of ["caddy", "keycloak", "web", "api"]) console.log(`\n--- ${svc} (last 40 lines)\n${tryRun("docker", [...compose, "logs", "--no-color", "--tail", "40", svc]).stdout}`);
+}
 if (!process.argv.includes("--keep")) dc("down", "-v");
 console.log(failed === 0 ? "\nall prod-like checks passed" : `\n${failed} check(s) failed`);
 process.exit(failed === 0 ? 0 : 1);
