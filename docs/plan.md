@@ -51,3 +51,7 @@ BFF conveys the client's network zone (today `MANAGED_ADDRESSES` on the socket a
 Stage 5 delivered: Postgres schema with forced RLS and a guard trigger, migrator/app roles, decide-and-write in one transaction, parity tests against `packages/policy`
 (docs/data-layer.md, ADR-10..12). Carried forward: stage 6 must decide how the BFF conveys the client network zone; stage 7 persists the `audit` obligation and break-glass
 justification (append-only table, hash chain); stage 8 adds attachments/file storage threats (T-28..T-31), distributed rate limiting and TLS between components.
+
+Stage 6 delivered: Next.js BFF with server-side OIDC (openid-client), encrypted Postgres sessions, CSRF scheme, allow-listed API client, strict CSP, functional pages (docs/bff.md, ADR-13..16).
+Carried forward: stage 7 persists the `audit` obligation and break-glass justification and should log BFF login/logout/refresh-failure events; stage 8 adds login-route rate limiting, TLS between components, key-ring rotation procedure,
+and a decision on conveying the client network zone; stage 10 designs the UI (the pages here are intentionally unstyled).

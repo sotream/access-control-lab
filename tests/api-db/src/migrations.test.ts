@@ -33,7 +33,7 @@ describe("migrations", () => {
 
   it("apply on an empty database and create the secured schema", async () => {
     const r = await migrate(migratorUrl(db));
-    expect(r.applied).toEqual(["001_case_files.sql"]);
+    expect(r.applied).toEqual(["001_case_files.sql", "002_bff_sessions.sql"]);
     const a = adminPool(db);
     const c = (await a.query("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'case_files'")).rows[0];
     expect(c).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
@@ -46,7 +46,7 @@ describe("migrations", () => {
     await migrate(migratorUrl(db));
     const again = await migrate(migratorUrl(db));
     expect(again.applied).toEqual([]);
-    expect(again.alreadyApplied).toEqual(["001_case_files.sql"]);
+    expect(again.alreadyApplied).toEqual(["001_case_files.sql", "002_bff_sessions.sql"]);
   });
 
   it("a migration edited after it was applied stops the run", async () => {
@@ -91,7 +91,7 @@ describe("migrations", () => {
 
   it("two runners at once apply each migration exactly once (advisory lock)", async () => {
     const [a, b] = await Promise.all([migrate(migratorUrl(db)), migrate(migratorUrl(db))]);
-    expect([...a.applied, ...b.applied]).toEqual(["001_case_files.sql"]);
+    expect([...a.applied, ...b.applied]).toEqual(["001_case_files.sql", "002_bff_sessions.sql"]);
   });
 
   it("the shipped migration file is exactly what the repository holds (guards against accidental edits after release)", () => {
