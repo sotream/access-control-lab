@@ -39,6 +39,15 @@ export async function session(user: string): Promise<BffSession> {
   return s;
 }
 
+/** a test ended this user's sessions (logout kills all of them): forget the cached one so the next test signs in again */
+export function forget(user: string): void {
+  live.delete(user);
+  const all = read();
+  delete all[user];
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(FILE, JSON.stringify(all), { mode: 0o600 });
+}
+
 /** same-origin JSON call through the BFF proxy, as the page scripts would make it */
 export function bff(s: BffSession, method: string, path: string, body?: unknown, extra: Record<string, string> = {}) {
   return vault(`/bff${path}`, {

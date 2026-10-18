@@ -34,6 +34,24 @@ export function psqlAs(user: string, password: string, sqlText: string, db = "ac
   return { ok: r.status === 0, out: `${r.stdout}${r.stderr}`.trim() };
 }
 
+/**
+ * Operator action: runs a script in a one-off container on the internal network, where the identity provider's admin API is reachable (the proxy hides it from outsiders).
+ * Used to create throw-away users, so that an attack that locks an account does not lock a seed user other attacks need.
+ */
+export function insideNetwork(script: string, extraEnv: Record<string, string> = {}): string {
+  const args = ["run", "--rm", "--network", "casefile-prod-like_app", ...Object.entries(extraEnv).flatMap(([k, v]) => ["-e", `${k}=${v}`]), "node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5", "node", "-e", script];
+  const r = spawnSync("docker", args, { cwd: ROOT, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`in-network script failed: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+export function createThrowawayUser(username: string, password: string): void {
+  insideNetwork(
+    `const kc='http://keycloak:8080';(async()=>{const t=await (await fetch(kc+'/realms/master/protocol/openid-connect/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:'admin-cli',grant_type:'password',username:'admin',password:process.env.AP}).toString()})).json();const r=await fetch(kc+'/admin/realms/casefile/users',{method:'POST',headers:{authorization:'Bearer '+t.access_token,'content-type':'application/json'},body:JSON.stringify({username:process.env.U,enabled:true,credentials:[{type:'password',value:process.env.P,temporary:false}]})});console.log(r.status)})()`,
+    { AP: env.KEYCLOAK_ADMIN_PASSWORD ?? "", U: username, P: password },
+  );
+}
+
 export const q = (s: string): string => `'${s.replaceAll("'", "''")}'`;
 
 export function insertCase(o: { title?: string; classification?: string; unit?: string; compartments?: string[]; status?: string; author?: string; body?: string }): string {

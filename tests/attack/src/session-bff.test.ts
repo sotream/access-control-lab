@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { FORM, form, idp, Jar, vault } from "./http.js";
 import { bffLogin, CALLBACK, ISSUER, keycloakLogin, oidcTokens, tokenRequest } from "./kc.js";
-import { bff, session } from "./sessions.js";
+import { bff, forget, session } from "./sessions.js";
 import { psql } from "./stack.js";
 
 const SESSION = "__Host-casefile_session";
@@ -85,6 +85,7 @@ describe("A-13 logout", () => {
     expect(out.status).toBe(303);
     expect(await who(copy), "the copied cookie after logout").toBe(false);
     expect((await vault("/bff/me", { jar: copy })).status).toBe(401);
+    forget("platform-admin"); // a logout ends every session of the user, the cached one included
   });
 });
 

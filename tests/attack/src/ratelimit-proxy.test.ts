@@ -5,7 +5,7 @@ import { apiStrict, FORM, form, idp, Jar, request, vault } from "./http.js";
 import { oidcTokens } from "./kc.js";
 import { rawRequest } from "./raw.js";
 import { session } from "./sessions.js";
-import { env } from "./stack.js";
+import { createThrowawayUser } from "./stack.js";
 
 const strict = { "x-attack-instance": "strict" };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -62,7 +62,9 @@ describe("A-72 the API's failed-authentication budget (production limits)", () =
 
 describe("A-73 password guessing is stopped by the identity provider, whatever address the attempts claim to come from", () => {
   it("six wrong passwords lock the account; the right password is then refused too, and rotating forwarded addresses changes nothing", async () => {
-    const victim = "platform-admin";
+    const victim = `attack-victim-${Date.now() % 1_000_000}`;
+    const password = `Pw-${Math.random().toString(36).slice(2)}-Aa1!`;
+    createThrowawayUser(victim, password);
     const attempt = async (password: string, i: number) => {
       const jar = new Jar();
       const start = await vault("/api/auth/login", { jar, headers: { "x-forwarded-for": `8.8.8.${i}` } });
@@ -70,8 +72,9 @@ describe("A-73 password guessing is stopped by the identity provider, whatever a
       const action = /<form[^>]*action="([^"]+)"/.exec(page.text)![1]!.replaceAll("&amp;", "&");
       return idp(new URL(action).pathname + new URL(action).search, { method: "POST", jar, headers: { ...FORM, "x-forwarded-for": `8.8.6.${i}` }, body: form({ username: victim, password, credentialId: "" }) });
     };
+    expect((await attempt(password, 0)).location, "the right password works before the guessing starts").toMatch(/vault\.localhost\/api\/auth\/callback|\/realms\/casefile\//);
     for (let i = 0; i < 7; i++) expect((await attempt(`wrong-${i}`, i)).status).toBe(200); // the form again, with an error
-    const right = await attempt(env.DEV_USER_PASSWORD ?? "", 99);
+    const right = await attempt(password, 99);
     expect(right.status, "the right password while the account is locked").toBe(200);
     expect(right.location).toBeNull();
     expect(right.text).toMatch(/Invalid username or password|temporarily disabled|locked/i);
