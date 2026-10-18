@@ -158,6 +158,13 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 - **Alternatives.** Audit row inside the business transaction (a rollback would erase the evidence of the attempt), asynchronous audit queue (an action could happen without a row), fail open (rejected).
 - **Consequences.** An allow row means "allowed", not "succeeded". An audit outage is an availability outage for case files, which is the intended trade.
 
+## ADR-20: Network zone is signed by the BFF, rate limits are per subject behind it
+
+- **Context.** The zone used to come from the socket address, which behind the BFF is always the BFF; the API-wide per-address throttle had the same flaw (all users share one address). Next.js route handlers also cannot see the socket.
+- **Decision.** The BFF decides the zone from a proxy-vouched client address (shared-secret header contract) and signs it per user and per call with an HMAC key ring; the API trusts only a verifying, fresh header for the token's subject. Authenticated API traffic is limited per verified subject, BFF traffic per user and per address, all with bounded in-memory tables.
+- **Alternatives.** Trust `X-Forwarded-For` from a configured peer (the BFF cannot see its peer), mTLS between proxy and BFF (heavier, kept as the upgrade path), accept the zone as a plain header from the BFF's token (`azp`) only (a user token with `azp=casefile-web` is only ever held by the BFF today, but the signature does not depend on that staying true), a shared store for counters (not needed yet).
+- **Consequences.** Two more secrets to manage and rotate; per-process counters; a compromised BFF can claim any zone for its users.
+
 ## ADR-19: A narrow SECURITY DEFINER function to log the true reason for a hidden file
 
 - **Context.** Row-level security makes a hidden file invisible to the API, so the API cannot evaluate the policy on it and would log "not found" for "clearance too low". The brief for the audit log is to keep the real reason internally while the client sees 404.

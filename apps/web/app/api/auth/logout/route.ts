@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auditAuth } from "../../../../src/server/audit";
 import { config } from "../../../../src/server/config";
+import { limited } from "../../../../src/server/limits";
 import { requireCsrfSession } from "../../../../src/server/guard";
 import { cookieAttrs, preAuthCookieName, sessionCookieName } from "../../../../src/server/cookies";
 import { sessionStore } from "../../../../src/server/session";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 /** POST only (no GET handler: a link or an image cannot log anyone out). Needs the CSRF token and a same-origin Origin. */
 export async function POST(req: Request) {
+  const slow = await limited("auth");
+  if (slow) return slow;
   const form = await req.formData().catch(() => undefined);
   const token = (form?.get("csrf") as string | null) ?? req.headers.get("x-csrf-token");
   const r = await requireCsrfSession(req, token);

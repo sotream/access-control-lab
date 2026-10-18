@@ -1,3 +1,5 @@
+import { signZone, parseZoneKeys } from "@acl/netguard";
+import { zoneOf, currentHeaders } from "./client";
 import { config } from "./config";
 import type { Session } from "./session-store";
 
@@ -89,6 +91,12 @@ export async function apiFetch(session: Session, method: string, path: string, o
     body = JSON.stringify(opts.json);
     if (Buffer.byteLength(body) > MAX_BODY) throw new ProxyRefused(413);
     headers["content-type"] = "application/json";
+  }
+  // the client's network zone, signed for this user: the API believes a zone from nobody else (no key configured: none sent, the API assumes unmanaged)
+  const ring = config().zoneKeys;
+  if (ring) {
+    const h = await currentHeaders();
+    headers["x-acl-zone"] = signZone(parseZoneKeys(ring), h ? zoneOf(h) : "unmanaged", session.userSub, Math.floor(Date.now() / 1000));
   }
   if (opts.breakGlass !== undefined) headers["x-break-glass-justification"] = opts.breakGlass.trim().slice(0, 500);
 

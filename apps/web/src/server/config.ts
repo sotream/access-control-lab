@@ -1,3 +1,5 @@
+import { parseNetworks, parseZoneKeys } from "@acl/netguard";
+
 // Runtime configuration of the BFF, parsed once on first use and validated. A bad value stops the request, never weakens a default.
 export interface WebConfig {
   /** exact origin the browser uses; the redirect and post-logout URIs are derived from it */
@@ -19,6 +21,18 @@ export interface WebConfig {
   maxSessionsPerUser: number;
   /** refresh when the access token has less than this many seconds left */
   refreshSkewSeconds: number;
+  /** client networks (IPs or CIDRs) counted as the managed zone; empty: nobody is */
+  managedCidrs: readonly string[];
+  /** the reverse proxy proves itself with this secret before any forwarded client address is believed; absent: forwarded headers are ignored */
+  trustedProxySecret: string | undefined;
+  /** zone-signing ring shared with the API; absent: no zone is sent and the API treats every request as unmanaged */
+  zoneKeys: string | undefined;
+  /** per minute: login, callback and logout per client address */
+  rateAuthPerMinute: number;
+  /** per minute: authenticated traffic per user */
+  rateUserPerMinute: number;
+  /** per minute: all traffic per client address (backstop) */
+  rateIpPerMinute: number;
   /** http to the identity provider is accepted only for loopback (dev) */
   allowInsecureIdp: boolean;
 }
@@ -68,6 +82,13 @@ export function loadWebConfig(env: Env = process.env): WebConfig {
   const databaseUrl = need(env, "WEB_DATABASE_URL");
   if (!/^postgres(ql)?:\/\//.test(databaseUrl)) throw new Error("WEB_DATABASE_URL must be a postgres:// URL");
 
+  const managedCidrs = (env.MANAGED_CIDRS ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  parseNetworks(managedCidrs); // throws on a typo
+  const trustedProxySecret = env.TRUSTED_PROXY_SECRET || undefined;
+  if (trustedProxySecret !== undefined && Buffer.byteLength(trustedProxySecret) < 32) throw new Error("TRUSTED_PROXY_SECRET must be at least 32 bytes");
+  const zoneKeys = env.ZONE_SIGNING_KEYS || undefined;
+  if (zoneKeys !== undefined) parseZoneKeys(zoneKeys);
+
   return {
     origin,
     issuer,
@@ -83,6 +104,12 @@ export function loadWebConfig(env: Env = process.env): WebConfig {
     absoluteSeconds: int(env, "SESSION_ABSOLUTE_SECONDS", 28_800, 300, 604_800),
     maxSessionsPerUser: int(env, "MAX_SESSIONS_PER_USER", 5, 1, 50),
     refreshSkewSeconds: int(env, "REFRESH_SKEW_SECONDS", 30, 5, 120),
+    managedCidrs,
+    trustedProxySecret,
+    zoneKeys,
+    rateAuthPerMinute: int(env, "RATE_AUTH_PER_MINUTE", 20, 1, 10_000),
+    rateUserPerMinute: int(env, "RATE_USER_PER_MINUTE", 300, 1, 100_000),
+    rateIpPerMinute: int(env, "RATE_IP_PER_MINUTE", 600, 1, 100_000),
     allowInsecureIdp: i.protocol === "http:" && loopbackIdp,
   };
 }

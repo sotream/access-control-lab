@@ -1,5 +1,6 @@
 // The guard and the policy engine together, with signed tokens and the in-memory fixture (T-11, T-15, T-16, T-17, T-25).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parseZoneKeys, signZone, type Zone } from "@acl/netguard";
 import { CaseFileStore, FIXTURE } from "../test/casefile-fixture.js";
 import { JwksServer, bearer, boot, goodClaims, makeKey, sign, type Booted, type TestKey } from "../test/harness.js";
 
@@ -21,6 +22,9 @@ let key: TestKey;
 let api: Booted;
 let store: CaseFileStore;
 const NOON = Date.UTC(2026, 9, 17, 12, 0, 0);
+const ZONE_KEYS = `z1:${Buffer.alloc(32, 7).toString("base64")}`;
+/** what the BFF sends: the zone, signed for this subject at the current time (freshness uses real time, the policy clock is fixed in this fixture) */
+const zoneFor = (sub: string, zone: Zone = "managed", at = Date.now(), keys = ZONE_KEYS) => ({ "x-acl-zone": signZone(parseZoneKeys(keys), zone, sub, Math.floor(at / 1000)) });
 
 async function tokenFor(u: User | (typeof USERS)[User], over: Record<string, unknown> = {}) {
   const x = (typeof u === "string" ? USERS[u] : u) as Record<string, unknown> & { roles: readonly string[] };
@@ -28,10 +32,10 @@ async function tokenFor(u: User | (typeof USERS)[User], over: Record<string, unk
   return sign(goodClaims({ ...rest, realm_access: { roles: [...roles, "default-roles-casefile"] }, ...over }), key);
 }
 
-async function call(b: Booted, who: User | (typeof USERS)[User], method: string, path: string, body?: unknown, headers: Record<string, string> = {}, over: Record<string, unknown> = {}) {
+async function call(b: Booted, who: User | (typeof USERS)[User], method: string, path: string, body?: unknown, headers: Record<string, string> = {}, over: Record<string, unknown> = {}, zone: Zone | "none" = "managed", at = Date.now()) {
   const res = await fetch(`${b.url}${path}`, {
     method,
-    headers: { ...bearer(await tokenFor(who, over)), ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    headers: { ...bearer(await tokenFor(who, over)), ...(zone !== "none" ? zoneFor((typeof who === "string" ? USERS[who] : who).sub, zone, at) : {}), ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -45,7 +49,7 @@ beforeAll(async () => {
   key = await makeKey("k1");
   jwks = await new JwksServer().start();
   jwks.keys = [key.publicJwk];
-  api = await boot(jwks.url, { MANAGED_ADDRESSES: "127.0.0.1" }, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => NOON });
+  api = await boot(jwks.url, { ZONE_SIGNING_KEYS: ZONE_KEYS }, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => NOON });
   store = api.app.get(CaseFileStore);
 });
 afterAll(async () => {
@@ -224,21 +228,39 @@ describe("export: network zone and time window", () => {
   });
 
   it("outside the window", async () => {
-    const night = await boot(jwks.url, { MANAGED_ADDRESSES: "127.0.0.1" }, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => Date.UTC(2026, 9, 17, 3, 0, 0) });
-    expect((await call(night, "analystOfficial", "GET", "/files/official-alpha/export")).status).toBe(403);
+    const at = Date.UTC(2026, 9, 17, 3, 0, 0);
+    const night = await boot(jwks.url, { ZONE_SIGNING_KEYS: ZONE_KEYS }, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => at });
+    expect((await call(night, "analystOfficial", "GET", "/files/official-alpha/export", undefined, {}, {}, "managed")).status).toBe(403);
     await night.close();
   });
 
-  it("address not in the managed list", async () => {
-    const away = await boot(jwks.url, {}, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => NOON });
-    expect((await call(away, "analystOfficial", "GET", "/files/official-alpha/export")).status).toBe(403);
-    await away.close();
+  it("no zone header, or the BFF says unmanaged: refused", async () => {
+    expect((await c("analystOfficial", "GET", "/files/official-alpha/export", undefined, {}, {}, "none")).status).toBe(403);
+    expect((await c("analystOfficial", "GET", "/files/official-alpha/export", undefined, {}, {}, "unmanaged")).status).toBe(403);
   });
 
-  it("X-Forwarded-For cannot claim the managed zone", async () => {
-    const away = await boot(jwks.url, { MANAGED_ADDRESSES: "10.1.2.3" }, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => NOON });
-    expect((await call(away, "analystOfficial", "GET", "/files/official-alpha/export", undefined, { "x-forwarded-for": "10.1.2.3" })).status).toBe(403);
-    await away.close();
+  it("a zone claim from anyone but the BFF is ignored: plain headers, forged MAC, other subject, other key, stale, replay on another user", async () => {
+    const sub = USERS.analystOfficial.sub;
+    const forged = signZone(parseZoneKeys(ZONE_KEYS), "managed", sub, Math.floor(Date.now() / 1000)).replace(/.$/, (ch) => (ch === "A" ? "B" : "A"));
+    const bad: Record<string, string>[] = [
+      { "x-forwarded-for": "10.1.2.3", "x-real-ip": "10.1.2.3", "x-acl-zone": "managed" },
+      { "x-acl-zone": "v1.z1.0.managed.AAAA" },
+      { "x-acl-zone": forged },
+      zoneFor(USERS.analystSecretA.sub), // signed for somebody else
+      zoneFor(sub, "managed", Date.now(), `z1:${Buffer.alloc(32, 8).toString("base64")}`), // another key
+      zoneFor(sub, "managed", Date.now() - 120_000), // stale
+    ];
+    for (const h of bad) {
+      const r = await c("analystOfficial", "GET", "/files/official-alpha/export", undefined, h, {}, "none");
+      expect(r.status, JSON.stringify(h)).toBe(403);
+    }
+    expect(api.logs.some((l) => l.includes("zone_header_rejected"))).toBe(true);
+  });
+
+  it("without a configured key ring even a well-formed header changes nothing", async () => {
+    const bare = await boot(jwks.url, {}, FIXTURE.controllers, { providers: FIXTURE.providers, clock: () => NOON });
+    expect((await call(bare, "analystOfficial", "GET", "/files/official-alpha/export")).status).toBe(403);
+    await bare.close();
   });
 });
 

@@ -1,4 +1,5 @@
 // All runtime configuration, parsed once and validated. Fails closed: a bad value stops startup.
+import { parseZoneKeys } from "@acl/netguard";
 export const CONFIG = Symbol("CONFIG");
 
 export interface AppConfig {
@@ -15,8 +16,11 @@ export interface AppConfig {
   jwksCooldownMs: number;
   /** how long a fetched JWKS is trusted before refetch, ms */
   jwksMaxAgeMs: number;
-  /** client addresses (as seen on the socket) that count as the managed network zone; empty means none */
-  managedAddresses: readonly string[];
+  /**
+   * Zone-signing key ring (`id:base64,...`, shared with the BFF). The network zone is believed only when it arrives in a header signed with one of
+   * these keys for the token's subject; without a ring the zone is always "unmanaged". The socket address is never used (it is the BFF's).
+   */
+  zoneKeys: string | undefined;
   corsOrigins: readonly string[];
   /** postgres connection string of the application role; absent: the data layer is not mounted */
   databaseUrl: string | undefined;
@@ -26,7 +30,7 @@ export interface AppConfig {
   /** seconds between audit checkpoints written by the API (0 disables the scheduler) */
   auditCheckpointSeconds: number;
   bodyLimit: string;
-  /** general rate limit: requests per window per client address */
+  /** general rate limit: requests per window per authenticated subject (public routes: per client address) */
   throttleLimit: number;
   throttleWindowMs: number;
   /** failed authentications tolerated per window per client address before 429 */
@@ -61,8 +65,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
   }
   if (url.search || url.hash || issuer.endsWith("/")) throw new Error("KEYCLOAK_ISSUER must be the bare issuer URL");
 
-  const managed = list(env, "MANAGED_ADDRESSES", "");
-  for (const a of managed) if (!/^[0-9a-fA-F:.]{2,45}$/.test(a)) throw new Error(`MANAGED_ADDRESSES entry not an IP address: ${a}`);
+  const zoneKeys = env.ZONE_SIGNING_KEYS || undefined;
+  if (zoneKeys !== undefined) parseZoneKeys(zoneKeys); // throws on a short or malformed key
   const databaseUrl = env.DATABASE_URL || undefined;
   if (databaseUrl !== undefined && !/^postgres(ql)?:\/\//.test(databaseUrl)) throw new Error("DATABASE_URL must be a postgres:// URL");
   const auditKeys = env.AUDIT_HMAC_KEYS || undefined;
@@ -80,7 +84,7 @@ export function loadConfig(env: Env = process.env): AppConfig {
     clockSkewSeconds: int(env, "CLOCK_SKEW_SECONDS", 5, 0, 60),
     jwksCooldownMs: int(env, "JWKS_COOLDOWN_MS", 30_000, 0, 3_600_000),
     jwksMaxAgeMs: int(env, "JWKS_MAX_AGE_MS", 600_000, 1_000, 86_400_000),
-    managedAddresses: list(env, "MANAGED_ADDRESSES", ""),
+    zoneKeys,
     corsOrigins,
     databaseUrl,
     dbPoolMax: int(env, "DB_POOL_MAX", 10, 1, 50),

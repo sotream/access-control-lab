@@ -43,6 +43,11 @@ describe("web configuration fails closed", () => {
     ["bad boolean", { COOKIE_SECURE: "yes" }],
     ["idle timeout absurd", { SESSION_IDLE_SECONDS: "5" }],
     ["session cap zero", { MAX_SESSIONS_PER_USER: "0" }],
+    ["managed CIDR typo", { MANAGED_CIDRS: "10.0.0.0/33" }],
+    ["managed entry not an address", { MANAGED_CIDRS: "office" }],
+    ["short proxy secret", { TRUSTED_PROXY_SECRET: "short" }],
+    ["short zone key", { ZONE_SIGNING_KEYS: "z:AAAA" }],
+    ["rate limit zero", { RATE_AUTH_PER_MINUTE: "0" }],
   ])("refuses %s", (_n, over) => expect(() => loadWebConfig({ ...base, ...over })).toThrow());
 });
 
