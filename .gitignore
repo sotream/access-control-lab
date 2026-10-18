@@ -15,3 +15,7 @@ data/
 .claude/
 secrets-dev/
 tests/attack/.cache/
+apps/web/public/ui.css
+tests/e2e/test-results/
+tests/e2e/.auth/
+tests/e2e/playwright-report/

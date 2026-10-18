@@ -301,7 +301,10 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
   it("break-glass: the justification header goes upstream only from the dedicated route", async () => {
     reset();
     const form = csrfOf((await b.req(`/cases/${ID}/break-glass`)).text);
-    const r = await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: "incident 4711 <b>x</b>" });
+    const posted = await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: "incident 4711 <b>x</b>" });
+    expect(posted.status).toBe(303);
+    expect(seen).toHaveLength(0); // the POST itself calls nothing upstream; the result page does the read
+    const r = await b.req(posted.location!.replace(WEB, ""));
     expect(r.status).toBe(200);
     expect(seen).toHaveLength(1);
     expect(seen[0]!.url).toBe(FILE);
@@ -317,10 +320,31 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
     for (const s of seen) expect(s.headers["x-break-glass-justification"]).toBeUndefined();
   });
 
+  it("the hand-over cookie opens the result page only for the case file it was made for, and the page does nothing without it", async () => {
+    reset();
+    const form = csrfOf((await b.req(`/cases/${ID}/break-glass`)).text);
+    await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: "incident 4711 ok" });
+    reset();
+    const other = "1f1e2d3c-4b5a-4968-8776-655443322110";
+    const wrongCase = await b.req(`/cases/${other}/break-glass/result`);
+    expect([302, 303, 307]).toContain(wrongCase.status);
+    expect(wrongCase.location).toMatch(/\/break-glass\?e=expired$/);
+    expect(seen.filter((x) => x.url.includes("case-files"))).toHaveLength(0); // no upstream read without a matching justification
+    const fresh = new Browser();
+    await fresh.login("analyst-official");
+    const noCookie = await fresh.req(`/cases/${ID}/break-glass/result`);
+    expect(noCookie.location).toMatch(/\/break-glass\?e=expired$/);
+    expect(seen.filter((x) => x.url.includes("case-files"))).toHaveLength(0);
+  });
+
   it("a short or blank justification is refused before the upstream is called", async () => {
     reset();
     const form = csrfOf((await b.req(`/cases/${ID}/break-glass`)).text);
-    for (const j of ["", "   ", "abcd"]) expect((await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: j })).status).toBe(400);
+    for (const j of ["", "   ", "abcd"]) {
+      const r = await b.post(`/actions/case-files/${ID}/break-glass`, { csrf: form, justification: j });
+      expect(r.status).toBe(303);
+      expect(r.location).toMatch(/\?e=short$/);
+    }
     expect(seen).toHaveLength(0);
   });
 });

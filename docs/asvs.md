@@ -304,7 +304,7 @@ Authentication is Keycloak's. The rows say what the realm is configured to do (`
 | 14.4.3 | CSP | met | strict nonce policy (`tests/bff/src/pages-headers.test.ts`) |
 | 14.4.4 | X-Content-Type-Options | met | |
 | 14.4.5 | HSTS | met | BFF and proxy (`scripts/prod-like-test.mjs`) |
-| 14.4.6 | Referrer-Policy | met | `no-referrer` |
+| 14.4.6 | Referrer-Policy | met | `same-origin` on the web app (see docs/bff.md), `no-referrer` on the API |
 | 14.4.7 | Frame protection | met | `frame-ancestors 'none'`, `X-Frame-Options: DENY` |
 | 14.5.1 | Only defined HTTP methods | met | |
 | 14.5.2 | Origin header not used for authentication | met | used only as one CSRF signal next to the token |
