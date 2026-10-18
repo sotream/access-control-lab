@@ -1,0 +1,227 @@
+# PROD-LIKE stack: the shape of a deployment (TLS proxy, internal networks, non-root read-only containers, secrets as files, ACL_ENV=production),
+# run on one machine with throw-away secrets. Not for real data. Setup: `node scripts/prod-like-setup.mjs`, then
+#   docker compose -f docker-compose.prod-like.yml up -d --build
+# Smoke and attack tests: `node scripts/prod-like-test.mjs` (docs/deployment.md). The dev stack in docker-compose.yml is unchanged.
+name: casefile-prod-like
+
+x-hardening: &hardened
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  restart: unless-stopped
+  init: true
+
+networks:
+  # the only network with a published port; only the proxy is on it
+  edge: {}
+  # proxy <-> BFF, API, identity provider. No route to the internet (internal).
+  app:
+    internal: true
+  # BFF, API, Keycloak <-> Postgres. Internal.
+  data:
+    internal: true
+  # API <-> clamd. Internal: the scanner cannot call out, nothing but the API can call it.
+  scan:
+    internal: true
+
+volumes:
+  postgres-data: {}
+  attachments: {}
+
+secrets:
+  database_url_api: { file: ./secrets-dev/prod-like/database_url_api }
+  database_url_web: { file: ./secrets-dev/prod-like/database_url_web }
+  audit_hmac_keys: { file: ./secrets-dev/prod-like/audit_hmac_keys }
+  zone_signing_keys: { file: ./secrets-dev/prod-like/zone_signing_keys }
+  session_encryption_keys: { file: ./secrets-dev/prod-like/session_encryption_keys }
+  trusted_proxy_secret: { file: ./secrets-dev/prod-like/trusted_proxy_secret }
+  casefile_web_secret: { file: ./secrets-dev/prod-like/casefile_web_secret }
+
+services:
+  caddy:
+    <<: *hardened
+    build: { context: ., dockerfile: Dockerfile.caddy } # Caddy built with a patched Go toolchain (the stock image had fixable HIGH findings, docs/deployment.md)
+    image: casefile-caddy:prod-like
+    user: "65532:65532"
+    # the proxy listens on 443 as a non-root user (the BFF and the API reach the identity provider by its public name on that port): lowering the
+    # unprivileged-port floor inside the container's own network namespace replaces the capability NET_BIND_SERVICE, so no capability is added back at all
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    ports:
+      - "127.0.0.1:443:443"
+    networks:
+      edge: {}
+      app:
+        aliases: [vault.localhost, id.localhost] # the BFF and the API reach the identity provider by its public name, through the proxy
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/extra:/etc/caddy/extra:ro
+      - ./secrets-dev/prod-like/tls.crt:/certs/tls.crt:ro
+      - ./secrets-dev/prod-like/tls.key:/certs/tls.key:ro
+    secrets: [trusted_proxy_secret]
+    tmpfs: ["/tmp:uid=65532,gid=65532", "/data:uid=65532,gid=65532", "/config:uid=65532,gid=65532"]
+    depends_on:
+      web: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 128
+
+  web:
+    <<: *hardened
+    build: { context: ., dockerfile: Dockerfile.web }
+    image: casefile-web:prod-like
+    environment:
+      ACL_ENV: production # also the image default; stated here so it cannot be overridden by omission
+      WEB_ORIGIN: https://vault.localhost
+      KEYCLOAK_ISSUER: https://id.localhost/realms/casefile
+      API_BASE_URL: http://api:3001
+      API_INTERNAL_HTTP: "true" # plain http BFF -> API on the internal network (docs/hardening.md section 3)
+      MANAGED_CIDRS: ""
+      NODE_EXTRA_CA_CERTS: /certs/ca.crt
+      WEB_DATABASE_URL_FILE: /run/secrets/database_url_web
+      AUDIT_HMAC_KEYS_FILE: /run/secrets/audit_hmac_keys
+      ZONE_SIGNING_KEYS_FILE: /run/secrets/zone_signing_keys
+      SESSION_ENCRYPTION_KEYS_FILE: /run/secrets/session_encryption_keys
+      CASEFILE_WEB_SECRET_FILE: /run/secrets/casefile_web_secret
+      TRUSTED_PROXY_SECRET_FILE: /run/secrets/trusted_proxy_secret
+    secrets: [database_url_web, audit_hmac_keys, zone_signing_keys, session_encryption_keys, casefile_web_secret, trusted_proxy_secret]
+    volumes:
+      - ./secrets-dev/prod-like/ca.crt:/certs/ca.crt:ro
+    tmpfs: ["/tmp", "/app/.next/cache"]
+    networks: [app, data]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:3000/api/auth/session').then(r=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 256
+
+  api:
+    <<: *hardened
+    build: { context: ., dockerfile: Dockerfile.api }
+    image: casefile-api:prod-like
+    environment:
+      ACL_ENV: production
+      API_HOST: 0.0.0.0
+      KEYCLOAK_ISSUER: https://id.localhost/realms/casefile
+      NODE_EXTRA_CA_CERTS: /certs/ca.crt
+      DATABASE_URL_FILE: /run/secrets/database_url_api
+      AUDIT_HMAC_KEYS_FILE: /run/secrets/audit_hmac_keys
+      ZONE_SIGNING_KEYS_FILE: /run/secrets/zone_signing_keys
+      ATTACHMENT_DIR: /var/lib/casefile/attachments
+      ATTACHMENT_SCANNER: clamd
+      CLAMD_HOST: clamd
+    secrets: [database_url_api, audit_hmac_keys, zone_signing_keys]
+    volumes:
+      - ./secrets-dev/prod-like/ca.crt:/certs/ca.crt:ro
+      - attachments:/var/lib/casefile/attachments
+    tmpfs: ["/tmp"]
+    networks: [app, data, scan]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      clamd: { condition: service_healthy }
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 256
+
+  # one-shot: applies the migrations as the schema owner, then exits. The running services never hold this credential.
+  migrate:
+    <<: *hardened
+    restart: on-failure:5 # the first attempt can race the database's own startup (DNS, init phase); five tries, then the stack does not start
+    build: { context: ., dockerfile: Dockerfile.api }
+    image: casefile-api:prod-like
+    command: ["dist/db/migrate-cli.js"]
+    env_file: ./secrets-dev/prod-like/compose.env # MIGRATOR_DATABASE_URL (the migrate CLI reads it from the environment only)
+    environment:
+      ACL_ENV: production
+    networks: [data]
+    depends_on:
+      postgres: { condition: service_healthy }
+    mem_limit: 256m
+    pids_limit: 64
+
+  postgres:
+    <<: *hardened
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    user: "70:70" # the postgres user of the alpine image: no root step at all (the volume is created owned by it)
+    env_file: ./secrets-dev/prod-like/compose.env # the stock init scripts take the role passwords from the environment; they never leave this container
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init-keycloak-db.sh:/docker-entrypoint-initdb.d/10-keycloak-db.sh:ro
+      - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/20-app-roles.sh:ro
+    tmpfs: ["/tmp:uid=70,gid=70", "/run/postgresql:uid=70,gid=70"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"] # over TCP: the init-phase server listens on the socket only, so the stack is not "healthy" before the init scripts ran
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 200
+
+  keycloak:
+    <<: *hardened
+    build: { context: ., dockerfile: Dockerfile.keycloak }
+    image: casefile-keycloak:prod-like
+    # production mode (`start --optimized`, not `start-dev`), TLS ends at the proxy, the hostname is pinned
+    command: ["start", "--optimized", "--import-realm"]
+    env_file: ./secrets-dev/prod-like/compose.env # database and bootstrap-admin credentials and the realm placeholders (Keycloak has no *_FILE for these)
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_HOSTNAME: https://id.localhost
+      KC_HTTP_ENABLED: "true" # plain http only on the internal network, behind the proxy
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_MANAGEMENT_PORT: "9000"
+    volumes:
+      - ./secrets-dev/prod-like/realm-casefile.json:/opt/keycloak/data/import/realm-casefile.json:ro
+    tmpfs: ["/tmp", "/opt/keycloak/data/tmp", "/opt/keycloak/data/h2"]
+    networks: [app, data]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      # the status LINE of /health/ready decides (200 only when ready): the body of a DOWN answer still contains sub-checks that say "UP"
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          head -n 1 <&3 | grep -q ' 200 '
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 400
+
+  clamd:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: Dockerfile.clamd
+      args:
+        SIGNATURES_DATE: ${SIGNATURES_DATE:-unset} # change to refresh the baked-in signatures
+    image: casefile-clamd:prod-like
+    user: "100:101" # the clamav user of the image
+    tmpfs: ["/tmp:uid=100,gid=101", "/run/clamav:uid=100,gid=101"]
+    networks: [scan] # internal: the scanner has no way out, signatures are baked into the image
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 200
