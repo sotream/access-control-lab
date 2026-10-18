@@ -7,7 +7,7 @@ import { enumerate } from "../../../apps/api/test/inventory.js";
 import { appUrl } from "./db.js";
 
 describe("route inventory of the real application", () => {
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile", DATABASE_URL: appUrl() });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile", DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS! });
   const started = createApp(cfg).then(async (app) => (await app.listen(0, "127.0.0.1"), app));
   afterAll(async () => (await started).close());
 
@@ -46,7 +46,7 @@ describe("route inventory of the real application", () => {
     for (const url of [process.env.ADMIN_DATABASE_URL!, process.env.MIGRATOR_DATABASE_URL!]) {
       const u = new URL(url);
       u.pathname = new URL(appUrl()).pathname;
-      await expect(createApp(loadConfig({ KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile", DATABASE_URL: u.toString() }))).rejects.toThrow(/unsafe for the API/);
+      await expect(createApp(loadConfig({ KEYCLOAK_ISSUER: "http://127.0.0.1:8080/realms/casefile", DATABASE_URL: u.toString(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS! }))).rejects.toThrow(/unsafe for the API/);
     }
   });
 });

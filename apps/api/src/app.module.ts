@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AuthFailureLimiter } from "./auth/auth-failure-limiter.js";
 import { AuthGuard } from "./auth/auth.guard.js";
 import { TokenVerifier } from "./auth/token-verifier.js";
+import { AUDIT_WRITER, MemoryAuditWriter } from "./audit/audit.js";
 import { dataLayer } from "./casefiles/casefiles.module.js";
 import { CONFIG, type AppConfig } from "./config.js";
 import { JsonLogger } from "./http/logger.js";
@@ -27,6 +28,8 @@ export class AppModule {
         { provide: LOGGER, useValue: opts.logger },
         { provide: CLOCK, useValue: opts.clock ?? Date.now },
         ...data.providers,
+        // without a database there is no chain: an in-memory sink keeps the HTTP-layer tests honest about WHAT is recorded
+        ...(cfg.databaseUrl ? [] : [{ provide: AUDIT_WRITER, useClass: MemoryAuditWriter }]),
         ...(opts.providers ?? []),
         // order matters: coarse rate limit first, then authentication and default deny
         { provide: APP_GUARD, useClass: ThrottlerGuard },

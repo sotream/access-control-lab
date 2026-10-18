@@ -4,6 +4,7 @@ import { CaseFileRepository } from "../../../apps/api/src/db/case-file.repositor
 import { withContext } from "../../../apps/api/src/db/context.js";
 import { sql } from "../../../apps/api/src/db/sql.js";
 import { JsonLogger } from "../../../apps/api/src/http/logger.js";
+import { MemoryAuditWriter } from "../../../apps/api/src/audit/audit.js";
 import { CaseFileService, type Caller } from "../../../apps/api/src/casefiles/case-file.service.js";
 import { adminPool, appPool, appUrl, clearRows, ctxOf, envOf, insertRow, MFA_ENV, subjectOf } from "./db.js";
 import pg from "pg";
@@ -11,7 +12,7 @@ import pg from "pg";
 const admin = adminPool();
 const pool = appPool(8);
 const logs: string[] = [];
-const files = new CaseFileService(pool, new CaseFileRepository(), new JsonLogger((l) => logs.push(l)));
+const files = new CaseFileService(pool, new CaseFileRepository(), new JsonLogger((l) => logs.push(l)), new MemoryAuditWriter());
 afterAll(async () => {
   await clearRows(admin);
   await admin.end();
@@ -205,7 +206,7 @@ describe("authoritative decision inside the transaction (defence in depth)", () 
         throw Object.assign(new Error("policy: ROLE_NOT_PERMITTED"), { code: "42501" });
       }
     }
-    const strict = new CaseFileService(pool, new RefusingRepo(), new JsonLogger((l) => logs.push(l)));
+    const strict = new CaseFileService(pool, new RefusingRepo(), new JsonLogger((l) => logs.push(l)), new MemoryAuditWriter());
     const id = await insertRow(admin, { authorId: "u1", status: "draft" });
     const r = await settle(strict.update(analyst("u1"), id, { title: "x", version: 1 }));
     expect(r.ok).toBe(false);

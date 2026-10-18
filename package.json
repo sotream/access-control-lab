@@ -8,14 +8,16 @@
   },
   "scripts": {
     "lint": "eslint . && node scripts/check-invisible-chars.mjs",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter @acl/audit build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
     "test:identity": "pnpm --filter @acl/identity-tests test:identity",
     "test:db": "pnpm --filter @acl/api-db-tests test:db",
     "db:migrate": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api migrate",
     "db:seed": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api seed",
-    "test:bff": "pnpm --filter '@acl/web' build && pnpm --filter @acl/bff-tests test:bff"
+    "test:bff": "pnpm --filter '@acl/web...' build && pnpm --filter @acl/bff-tests test:bff",
+    "audit:verify": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:verify",
+    "audit:checkpoint": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:checkpoint"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
