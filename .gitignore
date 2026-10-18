@@ -14,3 +14,4 @@ tests/identity/.cache/
 data/
 .claude/
 secrets-dev/
+tests/attack/.cache/
