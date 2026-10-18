@@ -45,7 +45,7 @@ Added after the stage 1 review, each with one owning stage.
 | Repo hygiene: SECURITY.md, CODEOWNERS, PR checklist, editorconfig, signed-commit guidance | 2 | done |
 | Dependabot auto-merge (minor/patch) | 2 | active: the `protect-main` ruleset requires checks and the variable `DEPENDABOT_AUTOMERGE` is `true` |
 | OpenSSF Scorecard | 8 | done: the repository is public; the workflow runs on `main` and weekly |
-| dependency-review-action | 8 | workflow present; red until the owner enables the repository's Dependency graph setting (not a code problem) |
+| dependency-review-action | 8 | done: runs on every pull request (the repository's Dependency graph is enabled) |
 | Image SBOM and image scan | 8 | done (`images` job) |
 | helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3, 6, 8 | done (API in stage 3, BFF in stage 6, distributed limiting stage 8) |
 | Realm: TLS (`sslRequired=all`), production hostname | 8 | done in the prod-like stack; the dev realm keeps its documented exception |

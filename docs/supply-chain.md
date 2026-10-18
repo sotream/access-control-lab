@@ -17,8 +17,9 @@ What exists, where it is enforced, and what is **unverified**. Images are built 
 | actionlint, zizmor | `security.yml` | workflow correctness and workflow security |
 | gitleaks | `ci.yml` | full history |
 | SBOM CycloneDX | `ci.yml` artifact `sbom-cyclonedx`, `security.yml` artifact `sbom-images` | production dependencies, and one SBOM per image built here |
-| dependency-review | `dependency-review.yml` | pull requests, fails on HIGH; red until the owner enables the repository's Dependency graph setting |
+| dependency-review | `dependency-review.yml` | pull requests, fails on HIGH |
 | OpenSSF Scorecard | `scorecard.yml` | main and weekly, published; has run successfully |
+| GitHub repository settings | repository settings (not code) | Dependency graph, Dependabot alerts and security updates, secret scanning and push protection are enabled |
 | Dependabot auto-merge | `dependabot-automerge.yml` | minor and patch updates, only when variable `DEPENDABOT_AUTOMERGE=true` (it is) and the `protect-main` ruleset requires the checks |
 
 ## Known exceptions

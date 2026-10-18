@@ -44,7 +44,7 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 
 ## ADR-7: Supply-chain gates run in CI without GitHub Advanced Security
 
-- **Status: superseded in part (2026-10-18).** The repository is now public, so code scanning upload, dependency-review and Scorecard are used (`docs/deployment.md`, `docs/supply-chain.md`); the `protect-main` ruleset requires nine checks and Dependabot auto-merge is active. dependency-review stays red until the owner enables the repository's Dependency graph setting. The text below records the original decision.
+- **Status: superseded in part (2026-10-18).** The repository is now public, so code scanning upload, dependency-review and Scorecard are used (`docs/deployment.md`, `docs/supply-chain.md`); the `protect-main` ruleset requires ten checks (including `prod-like`, `attack-tests` and `e2e-browser`), Dependabot auto-merge is active, and the Dependency graph, Dependabot alerts and security updates, secret scanning and push protection are enabled. The text below records the original decision.
 - **Context.** The repo was private on a free plan, so code scanning upload and dependency-review were unavailable.
 - **Decision.** Run the same scanners but keep results as artifacts and fail the job on findings (CodeQL SARIF gate, OSV,
   Trivy, zizmor, actionlint). Dependabot auto-merge exists but is inert until main requires these checks.

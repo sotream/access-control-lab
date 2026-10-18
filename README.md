@@ -89,7 +89,7 @@ Open http://127.0.0.1:3000 and sign in as one of the [dev users](docs/dev-users.
 | Nightly | workflow `attack-nightly` | CI | the attack suite with a random fuzz seed and the slow modes |
 | Mutation | workflow `attack-mutation` (manual) | CI | hand-made mutants of the defences; the suite must fail for each |
 
-Required checks on `main` (the `protect-main` ruleset): `check`, `identity`, `secret-scan`, `codeql`, `osv`, `images`, `workflows`, `prod-like`, `attack-tests`. `e2e-browser` runs on every pull request and is not required yet. `dependency-review` stays red until the repository's Dependency graph setting is enabled (a repository setting, not a code problem).
+Required checks on `main` (the `protect-main` ruleset): `check`, `identity`, `secret-scan`, `codeql`, `osv`, `images`, `workflows`, `prod-like`, `attack-tests`, `e2e-browser`. `dependency-review` also runs on every pull request. The repository has the Dependency graph, Dependabot alerts and security updates, secret scanning and push protection enabled.
 
 ## Concepts in one minute
 
