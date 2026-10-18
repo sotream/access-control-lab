@@ -246,7 +246,7 @@ describe("export: network zone and time window", () => {
       { "x-forwarded-for": "10.1.2.3", "x-real-ip": "10.1.2.3", "x-acl-zone": "managed" },
       { "x-acl-zone": "v1.z1.0.managed.AAAA" },
       { "x-acl-zone": forged },
-      zoneFor(USERS.analystSecretA.sub), // signed for somebody else
+      zoneFor("u-somebody-else"), // signed for somebody else
       zoneFor(sub, "managed", Date.now(), `z1:${Buffer.alloc(32, 8).toString("base64")}`), // another key
       zoneFor(sub, "managed", Date.now() - 120_000), // stale
     ];
