@@ -1,7 +1,6 @@
 # Supply chain controls
 
-What exists, where it is enforced, and what is **unverified**. Stage 8 extends this (image scanning in release
-builds, ASVS mapping).
+What exists, where it is enforced, and what is **unverified**. Stage 8 extended this: images are built here and scanned, SBOM per image, public-repo features are on (`docs/deployment.md`, `docs/asvs.md`).
 
 | Control | Where | Notes |
 |---------|-------|-------|
@@ -12,12 +11,14 @@ builds, ASVS mapping).
 | Actions pinned by SHA | all workflows | version in a comment; Dependabot updates them |
 | Least privilege tokens | `permissions: contents: read` top level | write scopes only on the inert automerge job |
 | Image digests | `docker-compose.yml` | tag plus `@sha256`; digests taken 2026-10-17 |
-| CodeQL (security-extended) | `security.yml` | SARIF kept as artifact; private repo without Advanced Security cannot upload to code scanning |
+| CodeQL (security-extended) | `security.yml` | SARIF uploaded to code scanning and kept as an artifact; any finding fails the job |
 | OSV-Scanner | `security.yml` | lockfile; complements `pnpm audit --prod` |
-| Trivy image scan | `security.yml` | HIGH/CRITICAL with fix available fail; see below |
+| Trivy image scan | `security.yml` `images` | the five images built here plus the compose-pinned ones; HIGH/CRITICAL with fix available fail; exceptions only in `.trivyignore.yaml` with reason and expiry (checked by `pnpm lint`) |
 | actionlint, zizmor | `security.yml` | workflow correctness and workflow security |
 | gitleaks | `ci.yml` | full history |
-| SBOM CycloneDX | `ci.yml` artifact `sbom-cyclonedx` | production dependencies only; image SBOM not yet |
+| SBOM CycloneDX | `ci.yml` artifact `sbom-cyclonedx`, `security.yml` artifact `sbom-images` | production dependencies, and one SBOM per image built here |
+| dependency-review | `dependency-review.yml` | pull requests, fails on HIGH |
+| OpenSSF Scorecard | `scorecard.yml` | main and weekly, published |
 | Dependabot auto-merge | `dependabot-automerge.yml` | inert until variable `DEPENDABOT_AUTOMERGE=true`, set only after main requires checks |
 
 ## Known exceptions
@@ -26,6 +27,5 @@ builds, ASVS mapping).
   `usr/local/bin/gosu` built with an old Go stdlib: 1 CRITICAL and 24 HIGH fixable findings in Trivy. gosu runs once at
   container start to drop root and is not network facing, so the Trivy step skips that single file. Everything else in
   the image is still gated. Revisit when upstream rebuilds gosu.
-- **Not run in CI because of the private free-tier repo:** `dependency-review-action` (needs Advanced Security on
-  private repos; OSV plus `pnpm audit` cover the lockfile instead), code scanning upload for CodeQL (SARIF artifact
-  instead), OpenSSF Scorecard (needs a token with read access to repo settings; not enabled, see PR notes).
+- **Images built here are patched by building them.** The stock `caddy` and `clamav` images had 3 and 26 fixable HIGH/CRITICAL findings on 2026-10-18; `Dockerfile.caddy` and `Dockerfile.clamd` replace them (`docs/deployment.md`). The cost is that their rebuild schedule is ours.
+- **The repository is public**, so dependency-review, code scanning upload and Scorecard are on (they were not possible while it was private).

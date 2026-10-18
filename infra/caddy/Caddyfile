@@ -1,0 +1,68 @@
+# Reverse proxy of the prod-like stack. TLS ends here; the only published port is this one (127.0.0.1:443 on the host).
+# Contract with the BFF (docs/hardening.md section 1): this proxy OVERWRITES x-acl-proxy-secret and x-acl-client-ip on every request to the BFF and removes
+# every inbound x-acl-* and forwarded header of the client, so a client cannot choose its own address, zone or proxy proof.
+{
+	admin off
+	auto_https off
+	servers {
+		# nothing in front of this proxy: no X-Forwarded-* from anyone is believed
+		trusted_proxies static
+		protocols h1 h2
+	}
+}
+
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+		-Via
+		-Alt-Svc
+	}
+}
+
+# what the BFF may see of the client: ours, never the client's (also imported by the test-only echo route)
+(to_bff) {
+	# `set` replaces whatever the client sent; the secret is read from a mounted file, never from the environment
+	header_up x-acl-proxy-secret "{file./run/secrets/trusted_proxy_secret}"
+	header_up x-acl-client-ip "{remote_host}"
+	header_up X-Forwarded-For "{remote_host}"
+	header_up X-Forwarded-Proto "https"
+	header_up -X-Acl-Zone
+	header_up -X-Real-Ip
+	header_up -Forwarded
+	header_up -X-Forwarded-Host
+	header_up -X-Forwarded-Port
+}
+
+https://vault.localhost {
+	tls /certs/tls.crt /certs/tls.key
+	import secure_headers
+	request_body {
+		max_size 6MB
+	}
+	import /etc/caddy/extra/*.caddy
+	reverse_proxy web:3000 {
+		import to_bff
+	}
+}
+
+# The identity provider is reachable for the browser through the proxy, and only the parts a browser needs. The admin console, the master realm,
+# metrics and health stay unreachable from outside.
+https://id.localhost {
+	tls /certs/tls.crt /certs/tls.key
+	import secure_headers
+	@public path /realms/casefile /realms/casefile/* /resources/* /robots.txt
+	handle @public {
+		reverse_proxy keycloak:8080 {
+			header_up X-Forwarded-For "{remote_host}"
+			header_up X-Forwarded-Proto "https"
+			header_up X-Forwarded-Host "id.localhost"
+			header_up -Forwarded
+		}
+	}
+	handle {
+		respond "Not Found" 404
+	}
+}

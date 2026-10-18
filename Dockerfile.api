@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+# API image: multi-stage, production dependencies only, distroless final stage (no shell, no package manager, no curl), non-root.
+# Build: docker build -f Dockerfile.api -t casefile-api .
+# Base digests are the multi-arch index digests, checked with `docker buildx imagetools inspect` on 2026-10-18; Dependabot (docker ecosystem) bumps them.
+
+FROM node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build
+ENV CI=true
+WORKDIR /src
+# pnpm version comes from package.json "packageManager"; corepack downloads exactly that (no integrity hash is pinned there: unverified)
+RUN corepack enable
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY packages/audit/package.json packages/audit/
+COPY packages/netguard/package.json packages/netguard/
+COPY packages/policy/package.json packages/policy/
+# the workspace has more members (web, tests); they are not part of this image, so the install is filtered
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --filter '@acl/api...'
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps/api apps/api
+RUN pnpm --filter '@acl/api...' build \
+ && pnpm --filter @acl/api deploy --prod --legacy /out \
+ && mkdir -p /out/attachments
+
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:59c479c9b8c123e66047315c968aa2d35e31ae5149c856e4110a79c8b3563f0b
+# production profile by default: an operator cannot forget it, dev values then stop the start
+ENV NODE_ENV=production ACL_ENV=production
+WORKDIR /app
+COPY --from=build --chown=65532:65532 /out /app
+# an empty directory owned by the runtime user: a named volume mounted here inherits the ownership on first use
+COPY --from=build --chown=65532:65532 /out/attachments /var/lib/casefile/attachments
+USER 65532:65532
+EXPOSE 3001
+# no curl or shell in this image: the probe is node itself
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:'+(process.env.API_PORT||3001)+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+CMD ["dist/main.js"]

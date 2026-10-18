@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+# Web BFF image (Next.js, production server): multi-stage, production dependencies only, distroless final stage, non-root.
+# Build: docker build -f Dockerfile.web -t casefile-web .
+
+FROM node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build
+ENV CI=true NEXT_TELEMETRY_DISABLED=1
+WORKDIR /src
+RUN corepack enable
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+COPY packages/audit/package.json packages/audit/
+COPY packages/netguard/package.json packages/netguard/
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --filter '@acl/web...'
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps/web apps/web
+# Turbopack externalises `pg` as `pg-<hash>`: a symlink made for the monorepo layout, which `pnpm deploy` does not carry over (it copies .next itself).
+# The loop re-creates each link against the deployed node_modules (pg is the only external today; the image test would catch a missing module).
+RUN pnpm --filter '@acl/web...' build \
+ && pnpm --filter @acl/web deploy --prod --legacy /out \
+ && mkdir -p /out/.next/node_modules \
+ && for p in apps/web/.next/node_modules/*; do l="$(basename "$p")"; ln -sfn "../../node_modules/${l%-*}" "/out/.next/node_modules/$l"; done
+
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:59c479c9b8c123e66047315c968aa2d35e31ae5149c856e4110a79c8b3563f0b
+# production profile by default: an operator cannot forget it, dev values then stop the start
+ENV NODE_ENV=production ACL_ENV=production NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app
+COPY --from=build --chown=65532:65532 /out /app
+USER 65532:65532
+EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=3 CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:3000/api/auth/session').then(r=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+# next start binds the interface given by -H; the container network, not the bind address, is the isolation boundary
+CMD ["node_modules/next/dist/bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]

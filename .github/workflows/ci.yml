@@ -72,6 +72,28 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  prod-like:
+    # The prod-like stack (TLS proxy, internal networks, non-root read-only containers, ClamAV) and the attacks on it: scripts/prod-like-test.mjs
+    # (docs/deployment.md). Builds seven images, so it is the slowest job.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Prod-like stack tests
+        run: node scripts/prod-like-test.mjs
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod-like.yml -f docker-compose.prod-like.test.yml logs --no-color --tail 80
+      - name: Stop stack
+        if: always()
+        run: docker compose -f docker-compose.prod-like.yml -f docker-compose.prod-like.test.yml down -v
+
+
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10

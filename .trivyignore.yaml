@@ -1,0 +1,5 @@
+# Trivy exceptions (docs/supply-chain.md, docs/deployment.md). Policy: HIGH/CRITICAL findings with a fix fail CI. Anything accepted instead of fixed is listed
+# here with a reason ("statement") and an expiry ("expired_at", at most 90 days out); scripts/check-trivyignore.mjs (part of `pnpm lint`) rejects an entry
+# without both, one that is expired, and one that expires too far ahead.
+# Empty on purpose today: the images this repository builds (api, web, keycloak, clamd, caddy) had no fixable HIGH/CRITICAL finding on 2026-10-18.
+vulnerabilities: []
