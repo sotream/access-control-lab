@@ -557,6 +557,40 @@ textarea {
   color: var(--text);
   font: inherit;
 }
+/* Selects: the native arrow sits flush against the edge, so it is replaced by a chevron drawn with two gradient strokes (no image file, no data: URI, no script;
+   the CSP is untouched). The chevron is 14px wide and sits 0.75rem from the right edge; padding-right keeps the label clear of it (a test pins the numbers).
+   Keyboard, the native list and mobile pickers are unchanged. In forced-colors mode the browser's own arrow comes back. */
+select {
+  --chevron: var(--muted);
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(to top right, transparent calc(50% - 1px), var(--chevron) calc(50% - 1px), var(--chevron) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(to bottom right, transparent calc(50% - 1px), var(--chevron) calc(50% - 1px), var(--chevron) calc(50% + 1px), transparent calc(50% + 1px));
+  background-repeat: no-repeat;
+  background-size: 7px 7px;
+  background-position: right calc(0.75rem + 7px) center, right 0.75rem center;
+  text-overflow: ellipsis;
+}
+select:hover {
+  --chevron: var(--text);
+}
+select:disabled {
+  --chevron: var(--line-strong);
+  color: var(--muted);
+  background-color: var(--surface-2);
+  cursor: not-allowed;
+}
+@media (forced-colors: active) {
+  select {
+    appearance: auto;
+    -webkit-appearance: auto;
+    background-image: none;
+    padding-right: 0.55rem;
+  }
+}
 input[type="file"] {
   max-width: 44rem;
   padding: 0.35rem;
