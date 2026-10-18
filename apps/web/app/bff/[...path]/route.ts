@@ -1,4 +1,4 @@
-import { allowed, apiFetch, MAX_PROXY_BODY, ProxyRefused } from "../../../src/server/api";
+import { allowed, apiFetch, MAX_PROXY_BODY, ProxyRefused, QUERY_KEYS } from "../../../src/server/api";
 import { json, requireCsrfSession } from "../../../src/server/guard";
 import { sessionFromCookieHeader } from "../../../src/server/session";
 
@@ -37,10 +37,13 @@ async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   try {
     // the browser's query string, cookies and headers are not forwarded; neither is any break-glass header (own route only)
-    const res = await apiFetch(session, method, path, jsonBody === undefined ? {} : { json: jsonBody });
+    // only the audit endpoints take parameters, and only the listed ones; any other path ignores the query string entirely
+    const query = QUERY_KEYS[path] ? Object.fromEntries(new URL(req.url).searchParams) : undefined;
+    const res = await apiFetch(session, method, path, { ...(jsonBody === undefined ? {} : { json: jsonBody }), ...(query ? { query } : {}) });
     const headers: Record<string, string> = { "content-type": res.contentType, "cache-control": "no-store" };
     if (res.wwwAuthenticate) headers["www-authenticate"] = res.wwwAuthenticate; // lets the UI start a step-up (RFC 9470)
     if (res.retryAfter) headers["retry-after"] = res.retryAfter;
+    if (res.proof) headers["x-audit-proof"] = res.proof;
     return new Response(res.body, { status: res.status, headers });
   } catch (e) {
     if (e instanceof ProxyRefused) return json(e.status, { error: "refused" });

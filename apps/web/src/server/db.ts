@@ -5,6 +5,12 @@ import { SessionStore } from "./session-store";
 
 const g = globalThis as unknown as { __casefilePool?: pg.Pool; __casefileStore?: SessionStore };
 
+/** The shared pool (casefile_web): sessions and audit appends. */
+export function webPool(): pg.Pool {
+  sessionStore();
+  return g.__casefilePool as pg.Pool;
+}
+
 /** One pool and one store per process (also across dev reloads). Connects as casefile_web: it can only touch bff_sessions. */
 export function sessionStore(): SessionStore {
   if (!g.__casefileStore) {

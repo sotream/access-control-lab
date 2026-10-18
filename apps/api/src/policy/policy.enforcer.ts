@@ -2,6 +2,9 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { evaluate, evaluateRole, type Decision, type Environment, type Resource, type Subject } from "@acl/policy";
 import { CONFIG, type AppConfig } from "../config.js";
+import { ServiceUnavailableException } from "@nestjs/common";
+import { sanitizeText } from "@acl/audit";
+import { AUDIT_WRITER, decisionEntry, type AuditWriter } from "../audit/audit.js";
 import { StepUpRequired } from "../http/errors.js";
 import { refusalFor } from "./refusal.js";
 import { JsonLogger } from "../http/logger.js";
@@ -24,6 +27,12 @@ export const toSubject = (p: Principal): Subject => ({
   compartments: p.compartments,
 });
 
+/** the id the client asked for, if it is shaped like an id (audit rows only hold such values; hostile strings are dropped, not stored) */
+const requestedId = (req: AppRequest): string | undefined => {
+  const id = (req.params as Record<string, unknown> | undefined)?.id;
+  return typeof id === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(id) ? id : undefined;
+};
+
 /** `::ffff:127.0.0.1` and `127.0.0.1` are the same client */
 const normalize = (ip: string | undefined) => (ip ?? "").replace(/^::ffff:/, "");
 
@@ -34,6 +43,7 @@ export class PolicyEnforcer {
     @Inject(CONFIG) private readonly cfg: AppConfig,
     @Inject(LOGGER) private readonly logger: JsonLogger,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(AUDIT_WRITER) private readonly audit: AuditWriter,
   ) {}
 
   /** Everything the policy needs besides subject and resource. Built here from the request and the verified token, never from client claims. */
@@ -46,7 +56,9 @@ export class PolicyEnforcer {
       networkZone: this.cfg.managedAddresses.includes(normalize(req.ip)) ? "managed" : "unmanaged",
       ...(header === undefined
         ? {}
-        : { breakGlass: { justification: (Array.isArray(header) ? header.join(", ") : header).trim().slice(0, MAX_JUSTIFICATION) } }),
+        : // control and bidi characters become spaces, whitespace collapses: the cleaned text is what the policy, the database context and the audit row all see.
+          // A header that is empty after cleaning stays an (empty) request, which the policy refuses.
+          { breakGlass: { justification: sanitizeText(Array.isArray(header) ? header.join(", ") : header, MAX_JUSTIFICATION) ?? "" } }),
     };
   }
 
@@ -70,20 +82,36 @@ export class PolicyEnforcer {
         // same refusal as a hidden resource: nonexistent and forbidden are indistinguishable to the client
         // unless the only thing in the way is MFA for a file this subject is cleared for (the loader can tell)
         if (loader.revealedByStepUp && (await loader.revealedByStepUp(req))) {
-          this.log(req, p, access.action, undefined, "deny", "STEP_UP_REQUIRED", ["abac.step-up"], ["step-up"]);
+          await this.record(req, p, access.action, requestedId(req), "deny", "STEP_UP_REQUIRED", ["abac.step-up"], ["step-up"]);
           throw new StepUpRequired("mfa");
         }
-        this.log(req, p, access.action, undefined, "deny", "RESOURCE_NOT_FOUND", ["resource.not-found"], []);
+        // the client gets 404 either way; the audit log gets the real reason when the loader can tell (clearance, compartment, role)
+        const why = (loader.hiddenReason && (await loader.hiddenReason(req))) || "RESOURCE_NOT_FOUND";
+        await this.record(req, p, access.action, requestedId(req), "deny", why, [why === "RESOURCE_NOT_FOUND" ? "resource.not-found" : "rls.hidden"], []);
         throw new NotFoundException();
       }
       decision = evaluate(subject, access.action, resource, env);
     }
 
-    this.log(req, p, access.action, resource?.id, decision.effect, decision.reason, decision.matchedRules, decision.obligations, env);
+    await this.record(req, p, access.action, resource?.id, decision.effect, decision.reason, decision.matchedRules, decision.obligations, env);
     if (decision.effect === "allow") return;
 
     // 404 vs 403: a subject who may not even read the resource is told it does not exist
     throw refusalFor(decision, existing, resource, subject, env);
+  }
+
+  /**
+   * stdout log line plus the audit row. An ALLOW without its audit row is not allowed to proceed (no audit, no action): 503.
+   * A DENY is refused either way, so a failed audit write is only logged.
+   */
+  private async record(req: AppRequest, p: Principal, action: string, resourceId: string | undefined, effect: "allow" | "deny", reason: string, rules: readonly string[], obligations: readonly string[], env?: Environment): Promise<void> {
+    this.log(req, p, action, resourceId, effect, reason, rules, obligations, env);
+    try {
+      await this.audit.append(decisionEntry({ sub: p.sub, roles: p.roles, action, resourceId, effect, reason, rules, obligations, requestId: req.id, justification: env?.breakGlass?.justification }));
+    } catch {
+      this.logger.event("error", "audit_write_failed", { reqId: req.id, sub: p.sub, action, effect });
+      if (effect === "allow") throw new ServiceUnavailableException();
+    }
   }
 
   private log(

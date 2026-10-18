@@ -1,5 +1,6 @@
 // Database helpers for the data-layer tests. Everything runs against the `<POSTGRES_DB>_test` database of the compose Postgres.
 import { randomUUID } from "node:crypto";
+import { GENESIS_HASH_HEX, parseAuditKeys } from "@acl/audit";
 import pg from "pg";
 import type { Environment, Subject } from "@acl/policy";
 import { toDbContext, withContext, type DbContext, type Tx } from "../../../apps/api/src/db/context.js";
@@ -30,6 +31,32 @@ export const TEST_DB = process.env.TEST_DB_NAME ?? `${devDb()}_test`;
 export const adminUrl = (db = TEST_DB) => withDb(need("ADMIN_DATABASE_URL"), db);
 export const migratorUrl = (db = TEST_DB) => withDb(need("MIGRATOR_DATABASE_URL"), db);
 export const appUrl = (db = TEST_DB) => withDb(need("DATABASE_URL"), db);
+
+export const auditUrl = (db = TEST_DB) => withDb(need("AUDIT_DATABASE_URL"), db);
+export const webDbUrl = (db = TEST_DB) => withDb(need("WEB_DATABASE_URL"), db);
+export const auditKeys = () => parseAuditKeys(need("AUDIT_HMAC_KEYS"));
+export const auditPool = (db = TEST_DB) => new pg.Pool({ connectionString: auditUrl(db), max: 2 });
+export const webPool = (db = TEST_DB) => new pg.Pool({ connectionString: webDbUrl(db), max: 4 });
+
+/**
+ * Empties the audit tables and rewinds the head, as a SUPERUSER with triggers disabled for the transaction (the documented break procedure).
+ * Test databases only: this is exactly the operation the production roles can never perform.
+ */
+export async function resetAudit(admin: pg.Pool): Promise<void> {
+  const c = await admin.connect();
+  try {
+    await c.query("BEGIN");
+    await c.query("SET LOCAL session_replication_role = replica");
+    await c.query("TRUNCATE audit_log, audit_checkpoints");
+    await c.query("UPDATE audit_head SET last_id = 0, last_hash = decode($1, 'hex')", [GENESIS_HASH_HEX]);
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => undefined);
+    throw e;
+  } finally {
+    c.release();
+  }
+}
 
 export const adminPool = (db = TEST_DB) => new pg.Pool({ connectionString: adminUrl(db), max: 4 });
 export const migratorPool = (db = TEST_DB) => new pg.Pool({ connectionString: migratorUrl(db), max: 2 });

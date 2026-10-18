@@ -115,7 +115,7 @@ export class SessionStore {
    * Runs `refresh` with the session row locked, so two requests of one session can never refresh at once (a refresh token is single use).
    * Returns the session with current tokens, or undefined if it is gone or the refresh failed (the session is then destroyed).
    */
-  async withRefresh(sid: string, needsRefresh: (t: TokenSet) => boolean, refresh: (t: TokenSet) => Promise<TokenSet>): Promise<Session | undefined> {
+  async withRefresh(sid: string, needsRefresh: (t: TokenSet) => boolean, refresh: (t: TokenSet) => Promise<TokenSet>, onKilled?: (s: Session) => void): Promise<Session | undefined> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(sid)) return undefined;
     const sidHash = sha256(sid);
     const client = await this.pool.connect();
@@ -142,6 +142,7 @@ export class SessionStore {
       } catch {
         await client.query(DELETE_ONE, [sidHash]); // refresh refused (expired, revoked or REUSED): the session ends
         await client.query("COMMIT");
+        onKilled?.(s);
         return undefined;
       }
       const sealed = this.seal(sidHash, fresh);

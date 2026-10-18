@@ -21,6 +21,10 @@ export interface AppConfig {
   /** postgres connection string of the application role; absent: the data layer is not mounted */
   databaseUrl: string | undefined;
   dbPoolMax: number;
+  /** audit HMAC key ring (id:base64,...), required whenever the data layer is mounted */
+  auditKeys: string | undefined;
+  /** seconds between audit checkpoints written by the API (0 disables the scheduler) */
+  auditCheckpointSeconds: number;
   bodyLimit: string;
   /** general rate limit: requests per window per client address */
   throttleLimit: number;
@@ -61,6 +65,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
   for (const a of managed) if (!/^[0-9a-fA-F:.]{2,45}$/.test(a)) throw new Error(`MANAGED_ADDRESSES entry not an IP address: ${a}`);
   const databaseUrl = env.DATABASE_URL || undefined;
   if (databaseUrl !== undefined && !/^postgres(ql)?:\/\//.test(databaseUrl)) throw new Error("DATABASE_URL must be a postgres:// URL");
+  const auditKeys = env.AUDIT_HMAC_KEYS || undefined;
+  if (databaseUrl !== undefined && auditKeys === undefined) throw new Error("AUDIT_HMAC_KEYS is required when DATABASE_URL is set: no audit key, no audit, no service");
   const corsOrigins = list(env, "CORS_ORIGINS", "");
   for (const o of corsOrigins) {
     if (o === "*" || !/^https?:\/\/[^/*]+$/.test(o)) throw new Error(`CORS_ORIGINS entry not an exact origin: ${o}`);
@@ -78,6 +84,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
     corsOrigins,
     databaseUrl,
     dbPoolMax: int(env, "DB_POOL_MAX", 10, 1, 50),
+    auditKeys,
+    auditCheckpointSeconds: int(env, "AUDIT_CHECKPOINT_SECONDS", 300, 0, 86_400),
     bodyLimit: env.BODY_LIMIT ?? "64kb",
     throttleLimit: int(env, "THROTTLE_LIMIT", 120, 1, 100_000),
     throttleWindowMs: int(env, "THROTTLE_WINDOW_MS", 60_000, 1_000, 3_600_000),

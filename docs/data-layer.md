@@ -27,7 +27,7 @@ checked for drift. `schema_migrations` (owner only) records applied files and ch
 
 `casefile_app` grants: `SELECT` on `role_grants`; `SELECT, DELETE` on `case_files`; `INSERT` on (title, body, classification, unit, compartments, author_id, status);
 `UPDATE` on (title, body, status). Nothing else: no `version`, `submitted_by_id`, `id`, timestamps, no TRUNCATE/TRIGGER/REFERENCES, no DDL, no `schema_migrations`, `PUBLIC` has no
-privileges, no `SECURITY DEFINER` function exists, every function pins `search_path`. At startup the API refuses to run if its role is a superuser, has BYPASSRLS or owns tables (T-37).
+privileges, exactly two `SECURITY DEFINER` functions exist (the audit chain trigger and the audit denial-reason lookup, both described in `docs/audit.md`), every function pins `search_path`. At startup the API refuses to run if its role is a superuser, has BYPASSRLS or owns tables (T-37).
 Passwords come from `.env` (dev only values in `.env.example`). Existing dev volumes do not re-run the init script: `docker compose down -v` once.
 
 ## Request context

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { auditAuth } from "./audit";
 import { config } from "./config";
 import { parseCookies, sessionCookieName } from "./cookies";
 import { sessionStore } from "./db";
@@ -26,7 +27,7 @@ export async function sessionFromCookieHeader(header: string | null): Promise<Se
   return store.withRefresh(sid, needs, async (t) => {
     const grant = await client.refreshTokenGrant(await oidc(), t.refreshToken);
     return tokenSetFrom(grant, t);
-  });
+  }, (killed) => void auditAuth({ action: "auth.session_killed", actorSub: killed.userSub, effect: "deny", reason: "REFRESH_REFUSED" }));
 }
 
 /** Server components and route handlers: the session for the current request. */

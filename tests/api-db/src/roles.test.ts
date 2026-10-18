@@ -51,9 +51,9 @@ describe("role attributes", () => {
     expect(c).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
   });
 
-  it("no SECURITY DEFINER function exists in the schema", async () => {
-    const r = await admin.query("SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prosecdef");
-    expect(r.rows).toEqual([]);
+  it("exactly two SECURITY DEFINER functions exist, both documented in the migrations (audit chain guard, audit denial reason)", async () => {
+    const r = await admin.query("SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prosecdef ORDER BY proname");
+    expect(r.rows.map((x) => x.proname)).toEqual(["audit_chain_guard", "audit_read_denial_reason"]);
   });
 
   it("every function pins its search_path", async () => {

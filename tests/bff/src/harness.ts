@@ -27,7 +27,7 @@ export const adminDb = () => adminPool();
 
 export async function startApi() {
   const logs: string[] = [];
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), MANAGED_ADDRESSES: "127.0.0.1", THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000" });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: env("AUDIT_HMAC_KEYS"), AUDIT_CHECKPOINT_SECONDS: "0", MANAGED_ADDRESSES: "127.0.0.1", THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000" });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), clock: () => Date.UTC(2026, 9, 17, 12, 0, 0) });
   await app.listen(API_PORT, "127.0.0.1");
   return { logs, stop: () => app.close() };

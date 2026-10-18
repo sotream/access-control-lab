@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   });
   const res = NextResponse.redirect(url, 303);
   res.cookies.set(clearPreAuthCookie()); // never two flows in one cookie
-  res.cookies.set(preAuthCookie(sealPreAuth({ state, nonce, verifier, returnTo })));
+  res.cookies.set(preAuthCookie(sealPreAuth({ state, nonce, verifier, returnTo, ...(acr ? { acr } : {}) })));
   res.headers.set("cache-control", "no-store");
   return res;
 }

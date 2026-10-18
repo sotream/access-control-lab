@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auditAuth } from "../../../../src/server/audit";
 import { config } from "../../../../src/server/config";
 import { requireCsrfSession } from "../../../../src/server/guard";
 import { cookieAttrs, preAuthCookieName, sessionCookieName } from "../../../../src/server/cookies";
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
   }
   const { session } = r;
   await sessionStore().destroyAllForUser(session.userSub); // every session of this user, every browser
+  await auditAuth({ action: "auth.logout", actorSub: session.userSub, effect: "allow", reason: "LOGOUT" }); // best effort: signing out is never blocked by the audit
 
   let target = new URL("/", config().origin);
   try {

@@ -140,3 +140,28 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 - **Context.** A BFF that forwards arbitrary paths and headers is an open proxy and an SSRF and header-smuggling surface (T-38).
 - **Decision.** One client builds every upstream request from scratch from an allow-list of nine method+path pairs against a fixed host. The browser's cookies, query string, forwarded and custom headers are never copied; the break-glass header exists only on its own route; responses are reduced to status, content type, `WWW-Authenticate` and `Retry-After`; size, time and redirect limits apply.
 - **Consequences.** Adding an API route to the UI is a one-line allow-list change plus a test, which is the point.
+
+## ADR-17: HMAC hash chain with a head table, a database-enforced linear chain, and an advisory lock
+
+- **Context.** The audit log must show who did what and resist tampering by someone with database access (T-24, T-26). A plain SHA-256 chain can be recomputed by anyone who can write the table.
+- **Decision.** Rows are chained with HMAC-SHA256 over a canonical, versioned serialisation (`acl-audit/v1`, specified in `docs/audit.md` so a third party can re-verify), keyed by a key ring outside the database (key id per row). The database enforces what it can without the key: no UPDATE/DELETE/TRUNCATE for
+  anyone (grants and triggers), forced row-level security, and linearity (`id = head + 1`, `prev_hash = head hash`) in a trigger that moves a head row, so no role can write a fork or a gap. Writers serialise on a transaction-scoped advisory lock taken before they read the head; the trigger is the backstop.
+  Signed checkpoints of the head make a deleted tail detectable; an exported copy makes deleting the checkpoints detectable. Ids are assigned by the writer, not by an identity column, so a rolled-back write leaves no gap.
+- **Alternatives.** Plain SHA-256 chain (recomputable by a DB admin), a hash chain with no head (a deleted tail is invisible), a per-actor chain (no total order, more complex verification), a sequence for ids (gaps on rollback make "deleted" and "rolled back" indistinguishable), an external ledger or WORM store (out of scope, named in the limits), `pgaudit`/logical decoding (records statements, not decisions).
+- **Consequences.** One lock and one head row serialise audited requests; fine at this scale, a ceiling later (batching or a single writer service would be the upgrade). The HMAC key is a secret to protect and rotate (stage 8); a compromised writer can write false but well-formed rows.
+
+## ADR-18: Audit before the action, fail closed for allows, best effort for refusals and sign-out
+
+- **Context.** "No audit, no action" is only true if the audit row exists before the effect and its failure stops the effect; but refusing to refuse (or to sign out) because the log is down would help an attacker (T-24).
+- **Decision.** The route guard writes the decision row (own short transaction) before the handler runs; an ALLOW whose row cannot be written becomes 503 and nothing happens (reads included, because a read is an effect). A DENY is refused regardless; a failed row is logged to stdout. BFF sign-in is fail closed (no row, no session); sign-out, session kills and CSRF refusals are
+  best effort. Refusals decided inside a transaction are written after it ended (a row inside would roll back with it, and a second connection per request could exhaust the pool). The audit row is not part of the business transaction: it records the decision, so a handler failure after an ALLOW leaves an allow row (documented).
+- **Alternatives.** Audit row inside the business transaction (a rollback would erase the evidence of the attempt), asynchronous audit queue (an action could happen without a row), fail open (rejected).
+- **Consequences.** An allow row means "allowed", not "succeeded". An audit outage is an availability outage for case files, which is the intended trade.
+
+## ADR-19: A narrow SECURITY DEFINER function to log the true reason for a hidden file
+
+- **Context.** Row-level security makes a hidden file invisible to the API, so the API cannot evaluate the policy on it and would log "not found" for "clearance too low". The brief for the audit log is to keep the real reason internally while the client sees 404.
+- **Decision.** `audit_read_denial_reason(uuid)` runs as `casefile_lookup`, a NOLOGIN role that can read exactly three columns (`id`, `classification`, `compartments`) and the role matrix, evaluates the read rule for the caller's own request context in SQL, and returns only a code. Only `casefile_app` (the API role) may execute it (not the web or verifier roles, not PUBLIC). Its result is checked against `packages/policy` on a grid
+  (parity test). This is the second SECURITY DEFINER function in the schema (the first is the audit chain trigger); the earlier "no SECURITY DEFINER" property of stage 5 is relaxed to "exactly these two", pinned by a test.
+- **Alternatives.** Log `RESOURCE_NOT_FOUND` for everything hidden (loses the information the log exists for), give the API a privileged metadata read (a bypass of RLS with data), run a second connection as a privileged role (same bypass, more moving parts).
+- **Consequences.** The API role can now ask "does this id exist and why can't I see it" in a form that returns no data; a bug or injection in the API could use it as an existence oracle (one bit, the same bit the audit log records). Documented and tested; the rules in SQL are a third copy of the read rule, covered by the same parity discipline.
