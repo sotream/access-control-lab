@@ -7,7 +7,7 @@
     "pnpm": ">=12"
   },
   "scripts": {
-    "lint": "eslint . && node scripts/check-invisible-chars.mjs && node scripts/check-trivyignore.mjs && node scripts/check-zap-allow.mjs && node scripts/check-threat-coverage.mjs && node scripts/count-asvs.mjs",
+    "lint": "eslint . && node scripts/check-invisible-chars.mjs && node scripts/check-trivyignore.mjs && node scripts/check-zap-allow.mjs && node scripts/check-threat-coverage.mjs && node scripts/count-asvs.mjs && node scripts/check-docs.mjs && node scripts/check-mermaid.mjs",
     "typecheck": "pnpm --filter @acl/audit --filter @acl/netguard build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
@@ -24,6 +24,8 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "eslint": "^10.13.0",
+    "jsdom": "30.1.3",
+    "mermaid": "11.17.2",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.5"
