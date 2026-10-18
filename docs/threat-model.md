@@ -116,7 +116,7 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 
 ## Threats
 
-"Covered by test" stays empty until the implementing stage lands a test. Stage numbers refer to `docs/plan.md`.
+"Covered by test" lists the tests and checks that fail when the mitigation breaks, including the black-box attacks of stage 9 (`docs/attack-catalogue.md`), or points at an accepted risk (`docs/accepted-risks.md`). `scripts/check-threat-coverage.mjs` (part of `pnpm lint`) fails when a threat has neither an existing test or check nor an accepted risk, or refers to a file that does not exist. Stage numbers refer to `docs/plan.md`.
 
 | ID | Threat | Mitigation | Stage | Covered by test |
 |----|--------|------------|-------|-----------------|
@@ -218,6 +218,12 @@ Out of scope for this lab: physical access, compromised host OS or hypervisor, n
 
 - The prod-like stack proves the shape (TLS proxy, networks without a way out, non-root read-only capability-free containers, secrets as files, production profile by default, real ClamAV): `docs/deployment.md`, `scripts/prod-like-test.mjs`. It is not a deployment; TLS between internal components, log shipping, backups and key management are open (`docs/asvs.md`, "Not met").
 - Docker ignores published ports for a container attached only to internal networks, so "web publishes a port" is inert on its own; the stack test therefore also checks that no service sits on the routable network beyond the proxy.
+
+## Stage 9 notes
+
+- The attack suite went in from outside and found five defects the unit and integration tests had not: methods the application does not use gave 500 (TRACE), an invalid percent-escape gave 500, JSON keys such as `toString`, `__proto__` and `""` were silently accepted as unknown fields, a break-glass justification with a control character or a non-Latin character failed with 502, and `openid-client` could be loaded twice. All fixed; each is pinned by the attack that found it (`docs/attack-catalogue.md`, "What the suite found").
+- Every threat now has an existing test or check; 15 risks are accepted in one place with owner, reason and upgrade path (`docs/accepted-risks.md`). AR-06 (no storage quota), AR-11 (no re-scan of pending attachments) and AR-14 (identity-provider features that are off) are **open**, not decided.
+- Measured, not assumed: an access token is accepted by the API after logout for up to its remaining lifetime (at most 300 s), a hidden resource and a missing one answer identically and in the same time (median 7 ms each).
 
 ## Known gaps accepted at stage 1
 

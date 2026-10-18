@@ -9,6 +9,7 @@ import { b64, hs256, parts, rs256, unsigned, withHeader, withPayload } from "./j
 import { ROOT, env } from "./stack.js";
 import { Jar } from "./http.js";
 import { randomBytes } from "node:crypto";
+import { fixtures } from "./fixtures.js";
 
 let t: Tokens;
 let jwk: { kid: string; n: string; e: string; kty: string };
@@ -154,9 +155,14 @@ describe("A-06 other ways of presenting a token", () => {
 });
 
 describe("A-07 the API alone: zone and rate headers from an attacker", () => {
-  it("a forged x-acl-zone on a valid token does not open the export rule", async () => {
-    const r = await api("/case-files/00000000-0000-4000-8000-000000000000/export", { headers: { authorization: `Bearer ${t.access_token}`, "x-acl-zone": `v1.zone.${Math.floor(Date.now() / 1000)}.managed.AAAA` } });
-    expect([403, 404]).toContain(r.status);
+  it("a forged x-acl-zone on a valid token does not open the export rule for an approved file", async () => {
+    const f = fixtures().offAlpha;
+    const bearerOnly = { authorization: `Bearer ${t.access_token}` };
+    expect((await api(`/case-files/${f}/export`, { headers: bearerOnly })).status, "no zone header").toBe(403);
+    const now = Math.floor(Date.now() / 1000);
+    for (const zone of [`v1.zone-1.${now}.managed.AAAA`, `v1.prod-like-zone-1.${now}.managed.${"A".repeat(43)}`, "managed", `v1.x.${now}.managed.`]) {
+      expect((await api(`/case-files/${f}/export`, { headers: { ...bearerOnly, "x-acl-zone": zone } })).status, zone).toBe(403);
+    }
   });
 });
 
