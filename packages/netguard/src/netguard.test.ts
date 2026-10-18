@@ -112,6 +112,18 @@ describe("zone header", () => {
     ];
     for (const [h, sub, t] of bad) expect(verifyZone(ring, h, sub, t), String(h)).toBeUndefined();
   });
+  it("a MAC has exactly one valid spelling (non-canonical base64url is refused)", () => {
+    const good = signZone(ring, "managed", "u1", now);
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const accepted = [...alphabet].filter((ch) => verifyZone(ring, good.slice(0, -1) + ch, "u1", now) === "managed");
+    expect(accepted, "only the canonical last character verifies").toEqual([good.slice(-1)]);
+    const tag = good.slice(good.lastIndexOf(".") + 1);
+    expect(tag).toHaveLength(43);
+    const sameBytes = [...alphabet].filter((ch) => Buffer.from(tag.slice(0, -1) + ch, "base64url").equals(Buffer.from(tag, "base64url")));
+    expect(sameBytes.length, "the aliasing the check exists for: several spellings decode to the same 32 bytes (2 spare bits: 4 spellings)").toBe(4);
+    expect(verifyZone(ring, `${good}=`, "u1", now)).toBeUndefined(); // padding
+    expect(verifyZone(ring, good.replace(/\.[^.]*$/, (t) => t.toUpperCase()), "u1", now)).toBeUndefined();
+  });
   it("rotation: old keys still verify, new ones sign", () => {
     const old = parseZoneKeys(K1);
     const both = parseZoneKeys(`${K2},${K1}`);
