@@ -140,6 +140,10 @@ describe("web production profile (ACL_ENV=production)", () => {
     ["plain-http api off the private-network flag", { API_BASE_URL: "http://api:3001" }],
     ["insecure cookies", { COOKIE_SECURE: "false" }],
   ])("refuses %s", (_n, over) => expect(() => loadWebConfig({ ...good, ...over })).toThrow());
+  it("says why when the proxy secret or the zone keys are missing (not a crash further down)", () => {
+    expect(() => loadWebConfig({ ...good, TRUSTED_PROXY_SECRET: undefined })).toThrow(/TRUSTED_PROXY_SECRET is required in production/);
+    expect(() => loadWebConfig({ ...good, ZONE_SIGNING_KEYS: undefined })).toThrow(/ZONE_SIGNING_KEYS is required in production/);
+  });
   it("plain http to the API only with the explicit private-network flag", () => {
     expect(loadWebConfig({ ...good, API_BASE_URL: "http://api:3001", API_INTERNAL_HTTP: "true" }).apiBase).toBe("http://api:3001");
   });

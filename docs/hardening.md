@@ -94,3 +94,45 @@ The migrator and admin database URLs are used by deployment jobs only and never 
 | Proxy secret | Change it on the proxy and the BFF together. Until both are changed, requests count as `direct` (shared rate-limit bucket, unmanaged zone): stricter, not weaker. | `hardening-bff.test.ts` (wrong secret) |
 | Database passwords | `ALTER ROLE ... PASSWORD`, update the secret, restart the service (pools reconnect). | not exercised |
 | OIDC client secret | Set a new secret on the Keycloak client, update `CASEFILE_WEB_SECRET`, restart the BFF. Keycloak's secret-rotation policy allows an overlap window. | **unverified** (Keycloak behaviour not tested here) |
+
+## 4. Attachments (T-28 to T-31, T-47)
+
+PDF, PNG, JPEG and plain text, up to 5 MB (`ATTACHMENT_MAX_BYTES`, at most 25 MB), added to **draft** case files. Download goes through the API only.
+
+**Upload path.** Browser form (multipart) -> BFF -> API (raw bytes, `application/octet-stream`). The BFF decides what it can before reading the body (content length required and capped, session, rate limit, Origin, Sec-Fetch-Site), reads the form, checks the synchronizer token, and forwards only the bytes, the file's own name and its declared type. The API route needs `update` on the parent (draft, own unit, own file for analysts); the route guard, the service transaction and row-level security each decide again.
+
+**What the bytes must be** (`apps/api/src/attachments/content.ts`; the declared type must equal the detected one):
+
+| Type | Checks |
+|------|--------|
+| PNG | signature, every chunk's length and CRC, IHDR first, IEND last with nothing after it, at most 20 000 px a side and 40 megapixels |
+| JPEG | starts FF D8 FF, ends FF D9 |
+| PDF | `%PDF-1.x/2.x` header, `%%EOF` in the last KiB, no `/JavaScript /JS /Launch /EmbeddedFile /OpenAction /AA /RichMedia /XFA /SubmitForm /ImportData /GoToR /GoToE`, no `#xx`-obfuscated names |
+| text | valid UTF-8, no NUL, no control, bidi or invisible characters |
+| all | no `<script`, `<html`, `<svg`, `<iframe`, `<object`, `<embed`, `<?php`, `<!doctype`, `<?xml`, `<body`, `<meta`, `javascript:` anywhere (polyglots) |
+
+Everything else is refused: SVG, HTML, archives (so there is nothing to decompress), office files, executables, scripts. The PDF check is a marker scan, not a sanitiser: object streams can hide active content. What really limits the damage is the scanner and the download headers below.
+
+**Names.** The submitted name is only a label: path and extension removed, anything but letters, digits, marks, space, `-`, `_`, `(`, `)` of any script becomes `_` (separators, dots, controls, bidi), at most 80 characters, and the extension comes from the detected type (`invoice.pdf.exe` is shown as `invoice_pdf.pdf`). It is never a path: bytes live under a random 128-bit key (`quarantine/<key>` until clean, then `files/<key>`), in 0700 directories, files 0600, created exclusively without following symlinks.
+
+**Scanner hook** (`scanner.ts`). `scan` returns a verdict or throws. `ATTACHMENT_SCANNER=clamd` talks INSTREAM to `CLAMD_HOST:CLAMD_PORT` and only `stream: OK` is clean. `none` is a development stub that says clean and **refuses to answer in production**, so nothing becomes downloadable there without a real scanner. Verdicts: `clean` (file moved to `files/`), `quarantined` (stays in `quarantine/`, never served), and a scanner error leaves the row `pending` (503, never served). A verdict is final (trigger).
+
+**Metadata and row-level security** (`005_attachments.sql`). `attachments` rows are visible exactly when the parent case file is visible: the policy asks `case_files` itself, so floor, need-to-know, step-up and break-glass are the same rules, not copies. Insert needs the parent's `update` rule, the uploader is the caller, the row is born `pending`. The app role has `SELECT`, `INSERT` and `UPDATE` on the three verdict columns only, no `DELETE`. `ON DELETE RESTRICT`: a draft with attachments cannot be deleted (409). Parity tests extend the stage 5 grid: `attach` equals the policy's `update`, `attachments-read` equals `read` (with and without break-glass), over the same subjects, environments and rows.
+
+**Download** (`GET /case-files/:id/attachments/:attachmentId`). Same policy as reading the parent, the attachment must belong to the parent in the path (otherwise 404, no existence oracle), only `clean`, audit row before the bytes leave (fail closed), stored hash checked on the way out. Headers: `Content-Type` from the allow-list, `Content-Disposition: attachment` with an ASCII fallback and the RFC 5987 name, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox; default-src 'none'`, `Cache-Control: no-store`. The BFF route re-sets the same headers and replaces the disposition if it does not match a pattern.
+
+**Audit.** `attachment.rejected` (deny, reason code), `attachment.upload` (allow, size, sha256, media type; written before any byte is stored), `attachment.scan` (allow `CLEAN`, deny `QUARANTINED` or `SCAN_UNAVAILABLE`), `attachment.download`. Details carry no name and no content; the audit schema gained `size`, `sha256`, `media` and `scan` (database and package lists equal, tested).
+
+**Also found and fixed on the way:** BFF route handlers had no body limit. Forms, the logout route and the proxy now require a declared content length (411) under a cap (413) before reading.
+
+**Not built / not verified:** per-user or total storage quota; re-scan of pending files; clamd against a real daemon (the client is tested against a fake server that speaks the same protocol, the prod-like compose in `docs/deployment.md` adds the daemon); virus signatures are the scanner's job; deleting attachments.
+
+## Mutation check (by hand)
+
+Same method as in earlier stages: apply one mutant, run the matching suite, restore, count a mutant as killed when a test fails. Scripts are not in the repository.
+
+- **Rate limits, proxy contract, zone, secrets (25 mutants, H01-H25):** clientIp trusting the chain without a trusted peer, taking the client-chosen left-most address, tolerating garbage; unbounded limiter table, limit off by one; zone MAC without subject, zone value, freshness or comparison; dev markers, entropy check, file+variable, typo profile; API believing any zone header, no per-subject limit, unlimited public routes, loopback http issuer in production, unchecked zone ring in production; web proxy secret not compared, forwarded address not validated, no user limit behind the session, login not limited, zone always managed. 23 killed at first; two survivors: `parseNetworks` prefix bound (Node's `BlockList` refuses a bad prefix itself: redundant layer) and "production does not require the proxy secret" (it still threw, but from a crash further down, not for the right reason): a test now pins the message, mutant killed.
+- **Attachments (43 mutants):** content (markup markers, bytes after IEND, CRC, dimension cap, declared type, PDF active content, text controls, name rules, inline disposition, clamd unknown answer as clean, store key check, overwrite), API (non-clean served, hash check, download/upload/scan audit rows best effort, scanner error as clean, infected promoted, inspection skipped, rejection audit, IDOR lookup without parent, quarantine path read, nosniff, sandbox CSP, content-type check, read-only policy on upload, unsanitised name header), SQL (select/insert/verdict policies, guard trigger, column grants, delete grant, FORCE RLS, media and key and name checks, details key list), BFF (token check, length bound, early origin check, disposition and type from the API, nosniff, session check, generic proxy, form bound). First run: survivors were audit-best-effort on upload and on the clean verdict (the live tests hit the route guard's audit failure first), the guard trigger, FORCE RLS, final verdicts (redundant behind grants and policies), read-only policy on upload (the service decides again), generic proxy with a real attachment id, form bounds, API-supplied headers. Each got a test (service-level fakes, superuser and owner probes, guard-row action, real id through the proxy, 300 KB form, stub API with hostile headers) and was re-run: killed.
+- **Survivors accepted as redundant layers (4):** API `x-content-type-options` on downloads (helmet sets it globally), API content-type check on upload (the raw body parser only produces a Buffer for `application/octet-stream`, the Buffer check refuses the rest), BFF early Origin check on upload (the token step repeats it; the early check only avoids reading the body), BFF `nosniff` on downloads (the proxy middleware sets it on every response). Each has a second layer that gives the same answer.
+
+Not mutation-tested: the clamd client against a real daemon, `RateLimiter.makeRoom` ordering beyond the bound, the BFF refresh budget, the attachment UI markup.

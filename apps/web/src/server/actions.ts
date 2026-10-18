@@ -33,10 +33,6 @@ const withNoStore = (r: NextResponse) => (r.headers.set("cache-control", "no-sto
 
 export function codeFor(r: ApiResult): string {
   if (r.stepUp) return "stepup";
-  if (r.status === 201) return "uploaded";
-  if (r.status === 413) return "toolarge";
-  if (r.status === 415 || r.status === 422) return "rejected";
-  if (r.status === 503) return "unavailable";
   if (r.status >= 200 && r.status < 300) return "done";
   if (r.status === 409) return "conflict";
   if (r.status === 400) return "invalid";

@@ -5,6 +5,10 @@ import { boundBody, requireOriginSession } from "../../../../../src/server/guard
 
 export const dynamic = "force-dynamic";
 
+/** the page's fixed message for an upload outcome */
+const uploadCode = (r: Awaited<ReturnType<typeof apiUpload>>): string =>
+  r.stepUp ? "stepup" : r.status === 201 ? "uploaded" : r.status === 413 ? "toolarge" : r.status === 415 || r.status === 422 ? "rejected" : r.status === 503 ? "unavailable" : codeFor(r);
+
 const refuse = (status: number, error: string) => NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
 
 /**
@@ -26,7 +30,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0 || file.size > MAX_UPLOAD) return back(`/cases/${id}`, "m", file instanceof File && file.size > MAX_UPLOAD ? "toolarge" : "rejected");
   try {
-    return back(`/cases/${id}`, "m", codeFor(await apiUpload(r.session, id, Buffer.from(await file.arrayBuffer()), file.type, file.name)));
+    return back(`/cases/${id}`, "m", uploadCode(await apiUpload(r.session, id, Buffer.from(await file.arrayBuffer()), file.type, file.name)));
   } catch (e) {
     if (e instanceof ProxyRefused) return refuse(e.status, "refused");
     return refuse(502, "upstream_unavailable");

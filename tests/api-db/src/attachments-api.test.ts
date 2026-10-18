@@ -13,7 +13,7 @@ import { SCANNER, type Scanner, type ScanVerdict } from "../../../apps/api/src/a
 import { makeJpeg, makePdf, makePng, makeText } from "../../../apps/api/src/attachments/fixtures.js";
 import { JsonLogger } from "../../../apps/api/src/http/logger.js";
 import { decode, login, REALM_URL, type Tokens } from "../../identity/src/kc.js";
-import { adminPool, appUrl, auditPool, clearRows, insertRow, resetAudit } from "./db.js";
+import { adminPool, appUrl, auditPool, clearRows, insertRow, migratorPool, resetAudit } from "./db.js";
 
 const admin = adminPool();
 const aud = auditPool();
@@ -158,7 +158,12 @@ describe("hostile files are refused before anything is stored (T-28, T-29)", () 
 describe("who may add and see attachments: the parent's rules (T-30)", () => {
   it("upload needs the right to update the parent: not a reviewer, not another analyst's file, not another unit, not a submitted file", async () => {
     const before = (await attachmentRows()).length;
-    expect((await upload("reviewer", draft, makePng())).status).toBe(403);
+    await resetAudit(admin);
+    const rev = await upload("reviewer", draft, makePng());
+    expect(rev.status).toBe(403);
+    // the ROUTE GUARD refused it as an update (not a service-level surprise after a read was allowed)
+    const guardRow = (await rows()).find((x) => x.requestId === rev.headers.get("x-request-id"));
+    expect(guardRow).toMatchObject({ action: "update", effect: "deny" });
     expect((await upload("analyst-official", other, makePng())).status).toBe(403); // analysts update only their own files
     expect((await upload("unit-admin-beta", draft, makePng())).status).toBe(403); // other unit
     expect((await upload("analyst-official", submitted, makePng())).status).toBe(403); // not a draft any more
@@ -334,6 +339,20 @@ describe("the audit trail of attachments (T-24, T-31)", () => {
 });
 
 describe("the database refuses what the API would never do (defence in depth)", () => {
+  it("even the superuser cannot rewrite an attachment or a final verdict (trigger), and the owner sees no rows without a context (forced RLS)", async () => {
+    const clean = (await attachmentRows()).find((r) => r.status === "clean")!;
+    const codes = async (stmt: string, params: unknown[]) => admin.query(stmt, params).then(() => "ok", (e: { code?: string }) => e.code);
+    expect(await codes("UPDATE attachments SET display_name = 'renamed.png' WHERE id = $1", [clean.id])).toBe("42501");
+    expect(await codes("UPDATE attachments SET sha256 = decode(repeat('11', 32), 'hex') WHERE id = $1", [clean.id])).toBe("42501");
+    expect(await codes("UPDATE attachments SET status = 'quarantined', scanned_at = now() WHERE id = $1", [clean.id])).toBe("42501"); // a clean verdict is final
+    const owner = migratorPool();
+    try {
+      expect((await owner.query("SELECT count(*)::int AS n FROM attachments")).rows[0].n).toBe(0);
+    } finally {
+      await owner.end();
+    }
+  });
+
   it("the app role cannot delete, cannot change anything but the verdict, cannot flip a final verdict, cannot insert for another uploader", async () => {
     const { appPool, probe, ctxOf, subjectOf, envOf } = await import("./db.js");
     const pool = appPool(2);

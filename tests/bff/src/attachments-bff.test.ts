@@ -1,7 +1,7 @@
 // Attachments through the BFF: upload form, listing, download. Real Next.js, real API, real database, real Keycloak (T-28..T-31, T-05, T-12).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makePdf, makePng } from "../../../apps/api/src/attachments/fixtures.js";
-import { Browser, adminDb, csrfOf, startApi, startWeb, WEB, type Resp, type WebServer } from "./harness.js";
+import { Browser, adminDb, csrfOf, startApi, startStubApi, startWeb, WEB, type Resp, type WebServer } from "./harness.js";
 
 let web: WebServer;
 let api: Awaited<ReturnType<typeof startApi>> | undefined;
@@ -130,7 +130,37 @@ describe("a stored attachment: list, download, access", () => {
     expect((await outsider.req(`/attachments/${hid}/${hidAttachment}`)).status).toBe(404);
     for (const p of [`/attachments/not-a-uuid/${aid}`, `/attachments/${caseId}/not-a-uuid`, `/attachments/${caseId}/..%2f..%2fetc%2fpasswd`]) expect((await owner.req(p)).status, p).toBe(404);
     expect((await owner.req(`/attachments/${caseId}/${aid}`, { method: "POST", headers: { origin: WEB } })).status).toBe(405);
+    expect((await owner.req(`/bff/case-files/${caseId}/attachments/${aid}`)).status).toBe(404); // a REAL attachment id is still not reachable through the generic proxy
+    const bigForm = await owner.req("/actions/case-files/create", { method: "POST", headers: { origin: WEB, "sec-fetch-site": "same-origin", "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ csrf, title: "x", body: "a".repeat(300 * 1024) }) });
+    expect(bigForm.status).toBe(413); // ordinary forms are bounded before they are read
     await admin.query("DELETE FROM attachments WHERE case_file_id = $1", [hid]);
     await admin.query("DELETE FROM case_files WHERE id = $1", [hid]);
+  });
+});
+
+describe("the download route does not trust the API's headers", () => {
+  it("a type outside the allow-list is refused; an odd disposition is replaced", async () => {
+    await api?.stop();
+    api = undefined;
+    const seenTypes: Record<string, string>[] = [
+      { "content-type": "text/html", "content-disposition": "inline" },
+      { "content-type": "image/png", "content-disposition": "inline; filename=evil.html" },
+      { "content-type": "image/svg+xml", "content-disposition": 'attachment; filename="a.svg"; filename*=UTF-8\'\'a.svg' },
+    ];
+    let n = 0;
+    const stub = await startStubApi(() => ({ status: 200, headers: seenTypes[n++ % 3]!, body: "<script>alert(1)</script>" }));
+    try {
+      const aid2 = "0f1e2d3c-4b5a-4968-8776-655443322111";
+      const get = () => fetch(`${WEB}/attachments/${caseId}/${aid2}`, { headers: { cookie: owner.web.header() }, redirect: "manual" });
+      const html = await get();
+      expect(html.status).toBe(502); // text/html is not an attachment type
+      const inline = await get();
+      expect(inline.status).toBe(200);
+      expect(inline.headers.get("content-disposition")).toBe('attachment; filename="download"'); // "inline" never passes
+      expect(inline.headers.get("content-type")).toBe("image/png");
+      expect((await get()).status).toBe(502); // svg is not allowed either
+    } finally {
+      await stub.stop();
+    }
   });
 });

@@ -39,7 +39,7 @@ describe("inspect: the bytes decide", () => {
     ["gzip", Buffer.concat([Buffer.from([0x1f, 0x8b, 8]), Buffer.alloc(200, 3)])],
     ["7z", Buffer.concat([Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]), Buffer.alloc(200, 4)])],
     ["random binary", Buffer.from(Array.from({ length: 300 }, (_, i) => (i * 131 + 7) % 256))],
-    ["UTF-16 text", Buffer.from("﻿hello", "utf16le")],
+    ["UTF-16 text", Buffer.from(`${String.fromCodePoint(0xfeff)}hello`, "utf16le")],
   ])("refuses %s", (_n, b) => {
     expect(code(b, "text/plain")).toBe("UNSUPPORTED_TYPE");
     expect(code(b, "application/octet-stream")).toBe("UNSUPPORTED_TYPE");
