@@ -53,9 +53,11 @@ export default async function CaseDetail({ params, searchParams }: { params: Pro
               <ol className="stepper mb-3" aria-label={t.detail.stepLabel}>
                 {STEPS.map((s, i) => <li key={s} {...(i === stepIdx ? { "aria-current": "step" as const } : {})} data-done={i < stepIdx}>{t.detail.step[s]}</li>)}
               </ol>
+              <div className="actions-row">
               <form method="post" action={`/actions/case-files/${id}/submit`} className="inline-form">{csrf}<button type="submit" className="btn" data-kind="primary" disabled={!draft}>{t.detail.submit}</button></form>
               <form method="post" action={`/actions/case-files/${id}/approve`} className="inline-form">{csrf}<button type="submit" className="btn" data-kind="primary" disabled={!submitted}>{t.detail.approve}</button></form>
               <form method="post" action={`/actions/case-files/${id}/delete`} className="inline-form">{csrf}<button type="submit" className="btn" data-kind="danger" disabled={!draft}>{t.detail.delete}</button></form>
+              </div>
               {!draft || !submitted ? <p className="mt-2 text-sm text-muted">{draft ? t.detail.notSubmitted : submitted ? t.detail.notDraft : `${t.detail.notDraft} ${t.detail.notSubmitted}`}</p> : null}
             </Panel>
             <Panel title={t.detail.history} id="p-hist"><p className="text-sm text-muted">{t.detail.historyHint}</p></Panel>

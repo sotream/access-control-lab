@@ -12,5 +12,5 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
   const q = { ...parseQuery(await searchParams), status: "submitted" };
   const r = await apiFetch(session, "GET", "/case-files");
   if (r.status !== 200) return <ErrorView status={r.status} />;
-  return <CaseList rows={parse<CaseFileSummary[]>(r) ?? []} q={q} base="/review" title={t.cases.titleReview} lead={t.cases.reviewLead} fixedStatus />;
+  return <CaseList rows={parse<CaseFileSummary[]>(r) ?? []} q={q} base="/review" title={t.cases.titleReview} lead={t.cases.reviewLead} fixedStatus canCreate={false} />;
 }

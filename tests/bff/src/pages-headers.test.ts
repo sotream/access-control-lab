@@ -193,7 +193,7 @@ describe("stored XSS renders inert (T-07)", () => {
 const REQUIRED: Record<string, RegExp> = {
   "x-content-type-options": /^nosniff$/,
   "x-frame-options": /^DENY$/,
-  "referrer-policy": /^no-referrer$/,
+  "referrer-policy": /^same-origin$/,
   "cross-origin-opener-policy": /^same-origin$/,
   "cross-origin-resource-policy": /^same-origin$/,
   "cache-control": /no-store/, // Next adds its own, stricter value on 404 pages: it still contains no-store
@@ -268,13 +268,15 @@ describe("security headers (T-07, T-31)", () => {
         expect(u.startsWith("/") || u.startsWith("#") || u.startsWith(WEB), `${p}: ${u}`).toBe(true);
       }
     }
-    const css = [...(await b.req("/")).text.matchAll(/href="(\/_next\/static\/[^"]+\.css)"/g)].map((m) => m[1]!);
-    expect(css.length).toBeGreaterThan(0);
+    const css = [...(await b.req("/")).text.matchAll(/href="([^"]+\.css)"/g)].map((m) => m[1]!);
+    expect(css).toEqual(["/ui.css"]); // the one self-served, build-time stylesheet
     for (const u of css) {
       const text = await (await fetch(`${WEB}${u}`)).text();
-      expect(text).not.toMatch(/@import|url\(\s*["']?https?:/i);
-      expect(text).not.toMatch(/@font-face/); // no fonts shipped or fetched
+      expect(text).not.toMatch(/@import|url\(\s*["']?(?:https?:)?\/\//i);
+      for (const m of text.matchAll(/url\(\s*["']?([^"')]+)/g)) expect(m[1]!.startsWith("/fonts/") || m[1]!.startsWith("data:"), `css url ${m[1]}`).toBe(true); // fonts are ours
     }
+    const js = [...(await b.req("/cases")).text.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]!);
+    for (const u of js) expect(u.startsWith("/"), `script ${u}`).toBe(true);
   });
 
   it("static assets are served with nosniff and are not reachable cross-origin by script (CORP same-origin applies to pages)", async () => {

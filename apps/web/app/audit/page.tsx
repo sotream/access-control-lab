@@ -39,6 +39,25 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const latest = checkpoints.reduce<Checkpoint | undefined>((a, c) => (!a || c.id > a.id ? c : a), undefined);
   const next = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]);
   if (page.nextCursor) next.set("cursor", page.nextCursor);
+  const proofPanels = (
+    <>
+          <Panel title={t.audit.proof} id="p-proof">
+            <p className="mb-2 text-sm text-muted">{t.audit.proofLead}</p>
+            <p className="mb-2">{latest ? <>{t.audit.lastCheckpoint}: <Mono>#{latest.id}</Mono>, {t.audit.last} <Mono>{latest.last_id}</Mono>, <Mono>{utc(latest.ts)}</Mono></> : t.audit.noCheckpoints}</p>
+            <p className="mb-2 text-sm">{t.audit.checkpoints}: <Mono>{checkpoints.length}</Mono></p>
+            <a className="btn" href="/audit/verify">{t.audit.verifyLink}</a>
+          </Panel>
+          <Panel title={t.audit.export} id="p-export">
+            <p className="mb-2 text-sm text-muted">{t.audit.exportLead}</p>
+            <form method="post" action="/actions/audit/export">
+              <input type="hidden" name="csrf" value={session.csrfToken} />
+              {KEYS.map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
+              <Field id="x-format" label={t.audit.format}><select id="x-format" name="format"><option value="ndjson">NDJSON</option><option value="csv">CSV</option></select></Field>
+              <button type="submit" className="btn" data-kind="primary">{t.audit.exportButton}</button>
+            </form>
+          </Panel>
+    </>
+  );
   return (
     <Page title={t.audit.title}>
       <form method="get" action="/audit" className="filters" role="search" aria-label={t.audit.filters}>
@@ -51,7 +70,10 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         <a className="btn" href="/audit">{t.audit.reset}</a>
       </form>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {proofPanels}
+        </div>
         <div>
           {page.rows.length === 0 ? <p className="empty" role="status">{t.audit.empty}</p> : (
             <div className="table-wrap">
@@ -78,23 +100,6 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
           )}
           {page.nextCursor ? <nav className="pager" aria-label={t.audit.next}><a href={`/audit?${next}`} rel="next">{t.audit.next}</a></nav> : null}
         </div>
-        <aside aria-label={t.audit.proof}>
-          <Panel title={t.audit.proof} id="p-proof">
-            <p className="mb-2 text-sm text-muted">{t.audit.proofLead}</p>
-            <p className="mb-2">{latest ? <>{t.audit.lastCheckpoint}: <Mono>#{latest.id}</Mono>, {t.audit.last} <Mono>{latest.last_id}</Mono>, <Mono>{utc(latest.ts)}</Mono></> : t.audit.noCheckpoints}</p>
-            <p className="mb-2 text-sm">{t.audit.checkpoints}: <Mono>{checkpoints.length}</Mono></p>
-            <a className="btn" href="/audit/verify">{t.audit.verifyLink}</a>
-          </Panel>
-          <Panel title={t.audit.export} id="p-export">
-            <p className="mb-2 text-sm text-muted">{t.audit.exportLead}</p>
-            <form method="post" action="/actions/audit/export">
-              <input type="hidden" name="csrf" value={session.csrfToken} />
-              {KEYS.map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
-              <Field id="x-format" label={t.audit.format}><select id="x-format" name="format"><option value="ndjson">NDJSON</option><option value="csv">CSV</option></select></Field>
-              <button type="submit" className="btn" data-kind="primary">{t.audit.exportButton}</button>
-            </form>
-          </Panel>
-        </aside>
       </div>
     </Page>
   );

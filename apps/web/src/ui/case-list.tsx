@@ -4,7 +4,7 @@ import { LEVELS } from "./components";
 import { t } from "./i18n";
 
 /** The list used by "my cases", "unit cases" and the review queue: filters, sortable headers, pagination, all via GET (works without script). */
-export function CaseList({ rows, q, base, title, lead, fixedStatus }: { rows: Row[]; q: Query; base: string; title: string; lead?: string; fixedStatus?: boolean }) {
+export function CaseList({ rows, q, base, title, lead, fixedStatus, canCreate }: { rows: Row[]; q: Query; base: string; title: string; lead?: string; fixedStatus?: boolean; canCreate: boolean }) {
   const { rows: shown, total, pages } = applyQuery(rows, q);
   const page = Math.min(q.page, pages);
   const level = highest(shown.map((r) => r.classification));
@@ -21,7 +21,7 @@ export function CaseList({ rows, q, base, title, lead, fixedStatus }: { rows: Ro
   return (
     <>
       {level ? <Banner level={level} /> : null}
-      <Page title={title} actions={<a className="btn" data-kind="primary" href="/cases/new">{t.cases.newCase}</a>}>
+      <Page title={title} actions={canCreate ? <a className="btn" data-kind="primary" href="/cases/new">{t.cases.newCase}</a> : undefined}>
         {lead ? <p className="mb-3 text-muted">{lead}</p> : null}
         <form method="get" action={base} className="filters" role="search" aria-label={t.cases.filters.label}>
           <div className="field"><label htmlFor="f-q">{t.cases.filters.text}</label><input id="f-q" name="q" defaultValue={q.q} maxLength={100} /></div>

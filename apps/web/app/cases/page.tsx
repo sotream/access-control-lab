@@ -13,5 +13,5 @@ export default async function Cases({ searchParams }: { searchParams: Promise<Re
   const [r, me] = await Promise.all([apiFetch(session, "GET", "/case-files"), getMe(session)]);
   if (r.status !== 200) return <ErrorView status={r.status === 403 ? 403 : r.status} />;
   const title = me?.roles.includes("unit-admin") && !me.roles.includes("analyst") ? t.cases.titleUnit : me?.roles.includes("analyst") ? t.nav.myCases : t.cases.title;
-  return <CaseList rows={parse<CaseFileSummary[]>(r) ?? []} q={q} base="/cases" title={title} />;
+  return <CaseList rows={parse<CaseFileSummary[]>(r) ?? []} q={q} base="/cases" title={title} canCreate={!!me?.roles.some((r) => r === "analyst" || r === "unit-admin")} />;
 }
