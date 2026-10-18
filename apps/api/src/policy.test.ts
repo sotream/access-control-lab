@@ -4,11 +4,11 @@ import { parseZoneKeys, signZone, type Zone } from "@acl/netguard";
 import { CaseFileStore, FIXTURE } from "../test/casefile-fixture.js";
 import { JwksServer, bearer, boot, goodClaims, makeKey, sign, type Booted, type TestKey } from "../test/harness.js";
 
-const MFA = { acr: "mfa", amr: ["pwd", "otp"] };
+const ACR_HIGH = { acr: "mfa", amr: ["pwd", "otp"] };
 const USERS = {
   analystOfficial: { sub: "u-analyst-official", roles: ["analyst"], clearance: "OFFICIAL", unit: "alpha" },
-  analystSecretA: { sub: "u-analyst-secret-a", roles: ["analyst"], clearance: "SECRET", unit: "alpha", compartments: ["A"], ...MFA },
-  analystSecretB: { sub: "u-analyst-secret-b", roles: ["analyst"], clearance: "SECRET", unit: "alpha", compartments: ["B"], ...MFA },
+  analystSecretA: { sub: "u-analyst-secret-a", roles: ["analyst"], clearance: "SECRET", unit: "alpha", compartments: ["A"], ...ACR_HIGH },
+  analystSecretB: { sub: "u-analyst-secret-b", roles: ["analyst"], clearance: "SECRET", unit: "alpha", compartments: ["B"], ...ACR_HIGH },
   reviewer: { sub: "u-reviewer", roles: ["reviewer"], clearance: "CONFIDENTIAL", unit: "alpha", compartments: ["A"] },
   adminAlpha: { sub: "u-admin-alpha", roles: ["unit-admin"], clearance: "CONFIDENTIAL", unit: "alpha" },
   adminBeta: { sub: "u-admin-beta", roles: ["unit-admin"], clearance: "CONFIDENTIAL", unit: "beta" },
@@ -99,7 +99,7 @@ describe("reading: clearance, compartments, existence hiding (T-15)", () => {
 });
 
 describe("step-up for SECRET (T-17)", () => {
-  it("cleared user without MFA: 403 with an RFC 9470 challenge and a machine code", async () => {
+  it("cleared user without ACR_HIGH: 403 with an RFC 9470 challenge and a machine code", async () => {
     const r = await c("analystSecretA", "GET", "/files/secret-alpha-a", undefined, {}, { acr: "pwd", amr: ["pwd"] });
     expect(r.status).toBe(403);
     expect(r.www).toContain('error="insufficient_user_authentication"');
@@ -149,7 +149,7 @@ describe("roles outside the matrix (T-11)", () => {
   });
 
   it("a token with no application role is denied everywhere", async () => {
-    const ghost = { sub: "u-none", roles: [] as string[], clearance: "SECRET", unit: "alpha", compartments: ["A"], ...MFA };
+    const ghost = { sub: "u-none", roles: [] as string[], clearance: "SECRET", unit: "alpha", compartments: ["A"], ...ACR_HIGH };
     for (const [m, p] of [["GET", "/files"], ["GET", "/files/official-alpha"], ["GET", "/audit"], ["GET", "/admin/users"]] as const) {
       const r = await c(ghost as never, m, p);
       expect([403, 404], `${m} ${p}`).toContain(r.status);
