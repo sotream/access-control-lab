@@ -66,4 +66,6 @@ Stage 8b delivered: hardened images (api, web, keycloak, caddy, clamd), the prod
 
 Stage 9 delivered: a black-box attack suite (`tests/attack`, 60 catalogued attacks, fuzzing, ZAP baseline) against the prod-like stack through its proxy, run in CI; a threat-coverage gate in `pnpm lint`; one place for accepted risks; mutation spot-check of the suite (`docs/attack-catalogue.md`, `docs/accepted-risks.md`, ADR-24). Five defects it found were fixed in the same PR.
 
-**Status: stages 1 to 9 are done. Stage 10 (frontend design) has not started and needs a design discussion with the owner.**
+Stage 10 delivered: the design system and every page of the console (docs/ui.md: tokens, themes, components, role navigation, classification banners, break-glass frame, step-up screen, audit pages with chain proof, generic error pages), self-hosted fonts, a build-time stylesheet under the unchanged strict CSP, and a real-browser test stage (`tests/e2e`: Playwright, axe, CSP violation collector, cookie and storage checks, keyboard order, role smoke paths, generated screenshots). The first real-browser run found that `Referrer-Policy: no-referrer` made Chromium send `Origin: null` on form posts, so every form was refused (ADR-25).
+
+**Status: stages 1 to 10 are done.**
