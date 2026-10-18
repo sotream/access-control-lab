@@ -1,8 +1,7 @@
 // Scripted browser and OIDC client for the prod-like stack: the BFF login flow as a user would do it, and a plain authorization-code exchange
 // (as the BFF itself does) to obtain real tokens that attacks can then tamper with, replay or misuse.
 import { createHash, createHmac, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { inject } from "vitest";
 import { env } from "./stack.js";
 import { FORM, form, idp, Jar, vault, type Resp } from "./http.js";
 
@@ -30,23 +29,26 @@ function totp(secret: string, at: number, offsetSteps: number): string {
 }
 
 // Keycloak refuses a TOTP step it has already seen for the user: take the first unused step, wait for the clock when none is left.
-// kept on disk: every test file is its own module instance and Keycloak counts steps per user across all of them
-const STEPS = new URL("../.cache/otp-steps.json", import.meta.url).pathname;
-const readSteps = (): Record<string, number> => {
-  try {
-    return JSON.parse(readFileSync(STEPS, "utf8")) as Record<string, number>;
-  } catch {
-    return {};
-  }
-};
+// Keycloak refuses a TOTP step it has already seen for the user: take the first unused step, wait for the clock when none is left. The state is per module instance;
+// the sign-ins of the whole run are done once in global-setup.ts and the few later sign-ins of MFA users happen minutes after them in a single file.
+const lastStep = new Map<string, number>();
+let seeded = false;
+/** the steps used so far, for the test runner to hand to the test files (global-setup.ts) */
+export const otpSteps = (): Record<string, number> => Object.fromEntries(lastStep);
 export async function nextOtp(user: string): Promise<string> {
+  if (!seeded) {
+    seeded = true;
+    try {
+      for (const [u, n] of Object.entries(inject("otpSteps"))) lastStep.set(u, Math.max(n, lastStep.get(u) ?? 0)); // inside a test file: continue after the sign-ins of the global setup
+    } catch {
+      /* the global setup itself: nothing to continue from */
+    }
+  }
   for (;;) {
-    const steps = readSteps();
     const now = Math.floor(Date.now() / 1000 / 30);
-    const step = Math.max(now, (steps[user] ?? 0) + 1);
+    const step = Math.max(now, (lastStep.get(user) ?? 0) + 1);
     if (step <= now + 1) {
-      mkdirSync(dirname(STEPS), { recursive: true });
-      writeFileSync(STEPS, JSON.stringify({ ...readSteps(), [user]: step }), { mode: 0o600 });
+      lastStep.set(user, step);
       return totp(TOTP_SECRET, Date.now(), step - now);
     }
     await new Promise((r) => setTimeout(r, 1000));

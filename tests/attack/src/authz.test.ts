@@ -107,7 +107,7 @@ describe("A-24 mass assignment: fields the client must not control", () => {
     ["constructor", { constructor: { prototype: { status: "approved" } } }],
   ])("create with an extra %s is refused", async (_n, extra) => {
     const s = await session("analyst-official");
-    const r = await vault("/bff/case-files", { method: "POST", jar: s.jar, headers: { origin: "https://vault.localhost", "x-csrf-token": s.csrf, "content-type": "application/json" }, body: JSON.stringify({ ...base, ...extra }).replace(/^\{/, "{") });
+    const r = await vault("/bff/case-files", { method: "POST", jar: s.jar, headers: { origin: "https://vault.localhost", "x-csrf-token": s.csrf, "content-type": "application/json" }, body: JSON.stringify({ ...base, ...extra }) });
     expect(r.status).toBe(400);
   });
   it("update with extra fields, and a classification change, is refused; nothing changed", async () => {

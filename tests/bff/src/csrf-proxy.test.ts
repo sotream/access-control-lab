@@ -305,7 +305,7 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
     expect(r.status).toBe(200);
     expect(seen).toHaveLength(1);
     expect(seen[0]!.url).toBe(FILE);
-    expect(seen[0]!.headers["x-break-glass-justification"]).toBe("incident 4711 <b>x</b>");
+    expect(decodeURIComponent(String(seen[0]!.headers["x-break-glass-justification"]))).toBe("incident 4711 <b>x</b>"); // percent-encoded on the wire: a header is Latin-1, a justification may be in any script
     expect(r.text).not.toContain("<b>x</b>");
     expect(r.headers.get("cache-control")).toBe("no-store");
 

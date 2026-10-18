@@ -272,10 +272,10 @@ await check("end to end through the proxy with a real Keycloak login: a clean fi
 // last: it uses up this machine's login budget for a minute
 await check("through the real proxy a client cannot choose its rate-limit bucket: forged client addresses share the real one", async () => {
   const codes = [];
-  for (let i = 0; i < 30; i++) codes.push((await vault("/api/auth/login", { headers: { "x-acl-client-ip": `9.9.9.${i}`, "x-forwarded-for": `9.9.8.${i}` } })).status);
-  // the sign-in of the earlier check already used part of the budget (login + callback): the first 429 comes at or before request 21, and never goes away
+  for (let i = 0; i < 30; i++) codes.push((await vault("/api/auth/login", { headers: { "x-attack-instance": "strict", "x-acl-client-ip": `9.9.9.${i}`, "x-forwarded-for": `9.9.8.${i}` } })).status); // the BFF instance with the production limits (the test compose file lifts them on the default one)
+  // a fresh bucket of 20: the 21st request is the first refusal, and it never goes away
   const first = codes.indexOf(429);
-  assert(first >= 14 && first <= 20, `the first 429 came at request ${first + 1}: ${codes}`);
+  assert(first >= 18 && first <= 20, `the first 429 came at request ${first + 1}: ${codes}`);
   assert(codes.slice(first).every((c) => c === 429) && codes.slice(0, first).every((c) => c === 303), `pattern: ${codes}`);
 });
 
