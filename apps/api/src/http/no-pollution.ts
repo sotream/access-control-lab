@@ -1,14 +1,16 @@
 import type { NextFunction, Request, Response } from "express";
 
-const FORBIDDEN = new Set(["__proto__", "constructor", "prototype"]);
+// class-transformer silently drops a property that is "" or that exists on Object.prototype (__proto__, constructor, toString, hasOwnProperty, valueOf, ...),
+// so a body such as {"toString": 1, ...} would be ACCEPTED as if the key were not there: found by the fuzzer, not by reading. "prototype" is added for the usual payload.
+const forbidden = (k: string): boolean => k === "" || k === "prototype" || k in Object.prototype;
 const MAX_DEPTH = 20;
 
-/** true when the value holds an own property with one of the prototype-pollution names, at any depth (bounded) */
+/** true when the value holds an own property with a prototype-pollution name, an empty name or the name of an Object.prototype member, at any depth (bounded) */
 export function hasPollutingKey(v: unknown, depth = 0): boolean {
   if (depth > MAX_DEPTH) return true; // absurd nesting is refused too
   if (typeof v !== "object" || v === null) return false;
   if (Array.isArray(v)) return v.some((x) => hasPollutingKey(x, depth + 1));
-  for (const k of Object.getOwnPropertyNames(v)) if (FORBIDDEN.has(k) || hasPollutingKey((v as Record<string, unknown>)[k], depth + 1)) return true;
+  for (const k of Object.getOwnPropertyNames(v)) if (forbidden(k) || hasPollutingKey((v as Record<string, unknown>)[k], depth + 1)) return true;
   return false;
 }
 

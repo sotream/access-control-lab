@@ -270,6 +270,12 @@ describe("prototype-pollution keys are refused like any unknown field (A-24)", (
     ["__proto__", '{"__proto__":{"status":"approved"}}'],
     ["constructor", '{"constructor":{"prototype":{"status":"approved"}}}'],
     ["prototype", '{"prototype":{"x":1}}'],
+    ["empty key", '{"":1}'],
+    ["toString", '{"toString":1}'],
+    ["hasOwnProperty", '{"title":"x","hasOwnProperty":null}'],
+    ["valueOf nested", '{"a":{"valueOf":{}}}'],
+    ["__defineGetter__", '{"__defineGetter__":0}'],
+    ["nested empty key", '{"a":[{"":{}}]}'],
     ["nested", '{"a":{"b":[{"c":{"__proto__":{}}}]}}'],
   ])("%s in a JSON body is a 400 before any handler runs", async (_n, body) => {
     const a = await boot(jwks.url);
