@@ -241,7 +241,11 @@ describe("export: network zone and time window", () => {
 
   it("a zone claim from anyone but the BFF is ignored: plain headers, forged MAC, other subject, other key, stale, replay on another user", async () => {
     const sub = USERS.analystOfficial.sub;
-    const forged = signZone(parseZoneKeys(ZONE_KEYS), "managed", sub, Math.floor(Date.now() / 1000)).replace(/.$/, (ch) => (ch === "A" ? "B" : "A"));
+    const signed = signZone(parseZoneKeys(ZONE_KEYS), "managed", sub, Math.floor(Date.now() / 1000));
+    const dot = signed.lastIndexOf(".");
+    const bytes = Buffer.from(signed.slice(dot + 1), "base64url");
+    bytes[0] = (bytes[0] ?? 0) ^ 0x01; // a byte of the DECODED MAC, never the last character (it carries 4 bits: some substitutions decode to the same bytes)
+    const forged = `${signed.slice(0, dot + 1)}${bytes.toString("base64url")}`;
     const bad: Record<string, string>[] = [
       { "x-forwarded-for": "10.1.2.3", "x-real-ip": "10.1.2.3", "x-acl-zone": "managed" },
       { "x-acl-zone": "v1.z1.0.managed.AAAA" },
