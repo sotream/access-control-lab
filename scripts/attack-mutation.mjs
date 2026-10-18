@@ -22,7 +22,7 @@ const MUTANTS = [
   { id: "M07", what: "the CSRF check of the BFF always passes", edits: [["apps/web/src/server/csrf.ts", '  const o = headers.get("origin");\n  if (!o) return "origin_missing";', '  if (true as boolean) return undefined;\n  const o = headers.get("origin");\n  if (!o) return "origin_missing";']], tests: ["session-bff.test.ts"], rebuild: WEB, expected: "killed" },
   { id: "M08", what: "the session cookie is not HttpOnly", edits: [["apps/web/src/server/cookies.ts", "({ httpOnly: true, secure:", "({ httpOnly: false as unknown as true, secure:"]], tests: ["session-bff.test.ts"], rebuild: WEB, expected: "killed" },
   { id: "M09", what: "the post-login redirect accepts any returnTo", edits: [["apps/web/src/server/redirect.ts", "  if (typeof raw !== \"string\" || raw.length === 0 || raw.length > 200) return DEFAULT;\n  const decoded", "  if (typeof raw === \"string\" && raw.length > 0) return raw;\n  if (typeof raw !== \"string\" || raw.length === 0 || raw.length > 200) return DEFAULT;\n  const decoded"]], tests: ["session-bff.test.ts"], rebuild: WEB, expected: "killed" },
-  { id: "M10", what: "the callback does not check the state", edits: [["apps/web/app/api/auth/callback/route.ts", "expectedState: pre.state, ", ""]], tests: ["session-bff.test.ts"], rebuild: WEB, expected: "killed" },
+  { id: "M10", what: "the callback checks the state against the one in the URL itself instead of the one in the pre-auth cookie", edits: [["apps/web/app/api/auth/callback/route.ts", "expectedState: pre.state, ", "expectedState: current.searchParams.get(\"state\") ?? undefined, "]], tests: ["session-bff.test.ts"], rebuild: WEB, expected: "killed" },
   { id: "M11", what: "the login endpoint has no rate limit", edits: [["apps/web/app/api/auth/login/route.ts", '  const slow = await limited("auth");\n  if (slow) return slow;\n', ""]], tests: ["ratelimit-proxy.test.ts"], rebuild: WEB, expected: "killed" },
   { id: "M12", what: "the API's failed-authentication budget is off", edits: [["apps/api/src/auth/auth.guard.ts", "if (this.limiter.blocked(key)) {", "if (false as boolean) {"]], tests: ["ratelimit-proxy.test.ts"], rebuild: API, expected: "killed" },
   { id: "M13", what: "the generic proxy forwards a break-glass header from the browser", edits: [["apps/web/app/bff/[...path]/route.ts", "{ ...(jsonBody === undefined ? {} : { json: jsonBody }), ...(query ? { query } : {}) }", '{ ...(jsonBody === undefined ? {} : { json: jsonBody }), ...(query ? { query } : {}), ...(req.headers.get("x-break-glass-justification") ? { breakGlass: req.headers.get("x-break-glass-justification") as string } : {}) }']], tests: ["breakglass-stepup.test.ts"], rebuild: WEB, expected: "killed" },
@@ -72,6 +72,8 @@ for (const m of MUTANTS) {
     outcome = { verdict: "ERROR", summary: String(e.message) };
   } finally {
     for (const [f, text] of originals) writeFileSync(join(root, f), text);
+    // put the stack back as the source is BEFORE the next mutant: a mutant that stays built poisons the next one (found the hard way: one broken login failed every later run)
+    rebuild(m.rebuild, m.restartCaddy);
   }
   const ok = outcome.verdict === "killed" ? m.expected === "killed" : outcome.verdict === "SURVIVED" && m.expected.startsWith("survives");
   console.log(`${m.id} ${outcome.verdict.padEnd(8)} ${ok ? "as expected" : "UNEXPECTED"}  ${m.what}  [${outcome.summary}]`);
