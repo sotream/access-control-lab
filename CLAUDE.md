@@ -7,3 +7,4 @@
 - Self-host fonts and assets, no CDN.
 - Commit author `andrii.prisniak+github@gmail.com`. Push with remote host `github2.com`.
 - Anything unverified (versions, library behaviour) is marked as such in the docs.
+- No Co-Authored-By trailers and no AI-attribution lines in commits or PR bodies; the commit author is the owner only.
