@@ -1,0 +1,90 @@
+import { config } from "./config";
+import type { Session } from "./session-store";
+
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+/** The only upstream calls the BFF will make. Everything else is refused: not an open proxy. */
+export const ROUTES: readonly { method: string; path: RegExp }[] = [
+  { method: "GET", path: /^\/me$/ },
+  { method: "GET", path: /^\/case-files$/ },
+  { method: "POST", path: /^\/case-files$/ },
+  { method: "GET", path: new RegExp(`^/case-files/${UUID}$`) },
+  { method: "PATCH", path: new RegExp(`^/case-files/${UUID}$`) },
+  { method: "DELETE", path: new RegExp(`^/case-files/${UUID}$`) },
+  { method: "POST", path: new RegExp(`^/case-files/${UUID}/submit$`) },
+  { method: "POST", path: new RegExp(`^/case-files/${UUID}/approve$`) },
+  { method: "GET", path: new RegExp(`^/case-files/${UUID}/export$`) },
+];
+
+export const allowed = (method: string, path: string): boolean => ROUTES.some((r) => r.method === method && r.path.test(path));
+
+const MAX_BODY = 64 * 1024;
+const MAX_RESPONSE = 2 * 1024 * 1024;
+const TIMEOUT_MS = 10_000;
+
+export interface ApiResult {
+  status: number;
+  body: string;
+  contentType: string;
+  /** RFC 6750 / 9470 challenge from the API, passed through so the UI can start a step-up */
+  wwwAuthenticate: string | null;
+  retryAfter: string | null;
+  /** true when the API asked for a stronger authentication (RFC 9470) */
+  stepUp: boolean;
+}
+
+export class ProxyRefused extends Error {
+  constructor(readonly status: number) {
+    super("refused");
+  }
+}
+
+async function readCapped(res: Response, max: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      throw new ProxyRefused(502);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
+ * Calls the NestJS API with the session's access token. Builds the request from scratch: no cookies, no browser headers, fixed host
+ * from configuration, path and method from the allow-list, no redirects followed, size and time limits.
+ * `breakGlass` is the ONLY way the break-glass header is sent (the dedicated route sets it; the generic proxy never does).
+ */
+export async function apiFetch(session: Session, method: string, path: string, opts: { json?: unknown; breakGlass?: string } = {}): Promise<ApiResult> {
+  if (!allowed(method, path)) throw new ProxyRefused(404);
+  const headers: Record<string, string> = { authorization: `Bearer ${session.tokens.accessToken}`, accept: "application/json" };
+  let body: string | undefined;
+  if (opts.json !== undefined) {
+    body = JSON.stringify(opts.json);
+    if (Buffer.byteLength(body) > MAX_BODY) throw new ProxyRefused(413);
+    headers["content-type"] = "application/json";
+  }
+  if (opts.breakGlass !== undefined) headers["x-break-glass-justification"] = opts.breakGlass.trim().slice(0, 500);
+
+  const res = await fetch(`${config().apiBase}${path}`, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+  if (res.status >= 300 && res.status < 400) throw new ProxyRefused(502);
+  const text = await readCapped(res, MAX_RESPONSE);
+  const www = res.headers.get("www-authenticate");
+  return {
+    status: res.status,
+    body: text,
+    contentType: res.headers.get("content-type")?.split(";")[0] === "application/json" ? "application/json" : "text/plain",
+    wwwAuthenticate: www,
+    retryAfter: res.headers.get("retry-after"),
+    stepUp: res.status === 403 && (www ?? "").includes("insufficient_user_authentication"),
+  };
+}
+
+export const MAX_PROXY_BODY = MAX_BODY;
