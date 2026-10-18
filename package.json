@@ -17,7 +17,9 @@
     "db:seed": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api seed",
     "test:bff": "pnpm --filter '@acl/web...' build && pnpm --filter @acl/bff-tests test:bff",
     "audit:verify": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:verify",
-    "audit:checkpoint": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:checkpoint"
+    "audit:checkpoint": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api audit:checkpoint",
+    "test:attack": "pnpm --filter @acl/attack-tests test:attack",
+    "test:e2e": "pnpm --filter @acl/e2e-tests test:e2e"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
