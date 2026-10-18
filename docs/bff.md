@@ -27,7 +27,7 @@ sequenceDiagram
   participant W as BFF
   participant K as Keycloak
   B->>W: GET /api/auth/login?returnTo=/cases
-  Note over W: state, nonce, PKCE verifier; returnTo validated (allow-list)
+  Note over W: state, nonce, PKCE verifier, returnTo validated against an allow-list
   W-->>B: 303 to Keycloak + Set-Cookie pre-auth (encrypted, httpOnly, Lax, 5 min)
   B->>K: authorization request (code_challenge S256, state, nonce)
   K-->>B: login (password, TOTP for SECRET) then 302 to /api/auth/callback?code&state&iss
@@ -35,7 +35,7 @@ sequenceDiagram
   W->>K: token request (code, verifier, client secret)
   K-->>W: access, refresh, ID token
   Note over W: library checks state, iss (RFC 9207), ID token signature, issuer, audience, nonce, expiry
-  W->>W: new random session id; destroy any previous session of this browser; encrypt tokens into Postgres
+  W->>W: new random session id, destroy any previous session of this browser, encrypt tokens into Postgres
   W-->>B: 303 returnTo + Set-Cookie session (httpOnly, Lax, host-only) + clear pre-auth cookie
 ```
 
