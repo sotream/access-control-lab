@@ -1,13 +1,11 @@
 # OWASP ASVS 4.0.3, level 2: where this system stands
 
-A mapping of the requirements that apply to this system to a status and to the test or file that proves it, and an honest list of what is **not met**. Written at the end of stage 8.
+A mapping of the requirements that apply to this system to a status and to the test or file that proves it, and an honest list of what is **not met**. This is a self-assessment by the people who built the system, not an audit or a certification.
 
-**Read this first.** Since stage 9 many rows are also proven from the outside by the black-box attack suite (`docs/attack-catalogue.md`, `tests/attack`); where a row names a unit test, an attack in that catalogue usually exercises the same property end to end.
-
-**Read this first, continued.**
+**How to read it.**
 - Requirement IDs and wording follow ASVS 4.0.3 as the author recalls them; the wording is shortened. The numbering was not diffed against the official CSV: **unverified**. Use the ID as a pointer, not as a citation.
 - Status: **met** (a test or a checked artefact proves it), **partial** (some of it, the gap is stated), **delegated** (Keycloak or the platform provides it; what we configured is stated, and "unverified" when not tested), **n/a** (does not apply, with the reason), **not met**.
-- "Proof" names a file in this repository. A claim without proof says so. This is a self-assessment by the people who built the system, not an audit.
+- "Proof" names a file in this repository. A claim without proof says so. Many rows are also proven from the outside by the black-box attack suite (`docs/attack-catalogue.md`, `tests/attack`) and, for the browser, by `tests/e2e`.
 - The system is a lab: Keycloak runs in `start-dev` in the dev compose and as a production-mode container only in the prod-like stack (`docs/deployment.md`). Nothing here was run in a real deployment.
 
 ## Summary
@@ -30,7 +28,7 @@ A mapping of the requirements that apply to this system to a status and to the t
 | V14 Configuration | 23 | 4 | 0 | 0 | 1 |
 | **Total** | 133 | 33 | 9 | 19 | 16 |
 
-(Counted from the rows below by a script, not from the ASVS: a row can stand for several requirements, and requirements that do not apply and are not listed are not counted.)
+(Counted from the rows below by `scripts/count-asvs.mjs`, which `pnpm lint` runs and which fails when this table and the rows disagree; `--fix` rewrites the table. A row can stand for several requirements, so these are rows, not ASVS requirement counts, and requirements that do not apply and are not listed are not counted.)
 
 ## V1 Architecture, design and threat modelling
 
@@ -338,4 +336,4 @@ Authentication is Keycloak's. The rows say what the realm is configured to do (`
 
 ## How this file is kept honest
 
-A change that adds or weakens a control must change a row here in the same pull request. Rows whose proof is a test name are verified by that test passing in CI; rows whose proof is "Caddy defaults", "Keycloak" or a document are not.
+The summary table is generated and checked from the rows (`node scripts/count-asvs.mjs`, part of `pnpm lint`). A change that adds or weakens a control must change a row here in the same pull request. Rows whose proof is a test name are verified by that test passing in CI; rows whose proof is "Caddy defaults", "Keycloak" or a document are not.

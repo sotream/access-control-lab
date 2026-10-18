@@ -44,7 +44,8 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 
 ## ADR-7: Supply-chain gates run in CI without GitHub Advanced Security
 
-- **Context.** The repo is private on a free plan, so code scanning upload and dependency-review are unavailable.
+- **Status: superseded in part (2026-10-18).** The repository is now public, so code scanning upload, dependency-review and Scorecard are used (`docs/deployment.md`, `docs/supply-chain.md`); the `protect-main` ruleset requires ten checks (including `prod-like`, `attack-tests` and `e2e-browser`), Dependabot auto-merge is active, and the Dependency graph, Dependabot alerts and security updates, secret scanning and push protection are enabled. The text below records the original decision.
+- **Context.** The repo was private on a free plan, so code scanning upload and dependency-review were unavailable.
 - **Decision.** Run the same scanners but keep results as artifacts and fail the job on findings (CodeQL SARIF gate, OSV,
   Trivy, zizmor, actionlint). Dependabot auto-merge exists but is inert until main requires these checks.
 - **Consequences.** No alerts tab; a failing job is the signal. Exceptions (postgres gosu) are written down in `docs/supply-chain.md`.
@@ -158,20 +159,20 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
 - **Alternatives.** Audit row inside the business transaction (a rollback would erase the evidence of the attempt), asynchronous audit queue (an action could happen without a row), fail open (rejected).
 - **Consequences.** An allow row means "allowed", not "succeeded". An audit outage is an availability outage for case files, which is the intended trade.
 
+## ADR-19: A narrow SECURITY DEFINER function to log the true reason for a hidden file
+
+- **Context.** Row-level security makes a hidden file invisible to the API, so the API cannot evaluate the policy on it and would log "not found" for "clearance too low". The audit requirement is to keep the real reason internally while the client sees 404.
+- **Decision.** `audit_read_denial_reason(uuid)` runs as `casefile_lookup`, a NOLOGIN role that can read exactly three columns (`id`, `classification`, `compartments`) and the role matrix, evaluates the read rule for the caller's own request context in SQL, and returns only a code. Only `casefile_app` (the API role) may execute it (not the web or verifier roles, not PUBLIC). Its result is checked against `packages/policy` on a grid
+  (parity test). This is the second SECURITY DEFINER function in the schema (the first is the audit chain trigger); the earlier "no SECURITY DEFINER" property of stage 5 is relaxed to "exactly these two", pinned by a test.
+- **Alternatives.** Log `RESOURCE_NOT_FOUND` for everything hidden (loses the information the log exists for), give the API a privileged metadata read (a bypass of RLS with data), run a second connection as a privileged role (same bypass, more moving parts).
+- **Consequences.** The API role can now ask "does this id exist and why can't I see it" in a form that returns no data; a bug or injection in the API could use it as an existence oracle (one bit, the same bit the audit log records). Documented and tested; the rules in SQL are a third copy of the read rule, covered by the same parity discipline.
+
 ## ADR-20: Network zone is signed by the BFF, rate limits are per subject behind it
 
 - **Context.** The zone used to come from the socket address, which behind the BFF is always the BFF; the API-wide per-address throttle had the same flaw (all users share one address). Next.js route handlers also cannot see the socket.
 - **Decision.** The BFF decides the zone from a proxy-vouched client address (shared-secret header contract) and signs it per user and per call with an HMAC key ring; the API trusts only a verifying, fresh header for the token's subject. Authenticated API traffic is limited per verified subject, BFF traffic per user and per address, all with bounded in-memory tables.
 - **Alternatives.** Trust `X-Forwarded-For` from a configured peer (the BFF cannot see its peer), mTLS between proxy and BFF (heavier, kept as the upgrade path), accept the zone as a plain header from the BFF's token (`azp`) only (a user token with `azp=casefile-web` is only ever held by the BFF today, but the signature does not depend on that staying true), a shared store for counters (not needed yet).
 - **Consequences.** Two more secrets to manage and rotate; per-process counters; a compromised BFF can claim any zone for its users.
-
-## ADR-19: A narrow SECURITY DEFINER function to log the true reason for a hidden file
-
-- **Context.** Row-level security makes a hidden file invisible to the API, so the API cannot evaluate the policy on it and would log "not found" for "clearance too low". The brief for the audit log is to keep the real reason internally while the client sees 404.
-- **Decision.** `audit_read_denial_reason(uuid)` runs as `casefile_lookup`, a NOLOGIN role that can read exactly three columns (`id`, `classification`, `compartments`) and the role matrix, evaluates the read rule for the caller's own request context in SQL, and returns only a code. Only `casefile_app` (the API role) may execute it (not the web or verifier roles, not PUBLIC). Its result is checked against `packages/policy` on a grid
-  (parity test). This is the second SECURITY DEFINER function in the schema (the first is the audit chain trigger); the earlier "no SECURITY DEFINER" property of stage 5 is relaxed to "exactly these two", pinned by a test.
-- **Alternatives.** Log `RESOURCE_NOT_FOUND` for everything hidden (loses the information the log exists for), give the API a privileged metadata read (a bypass of RLS with data), run a second connection as a privileged role (same bypass, more moving parts).
-- **Consequences.** The API role can now ask "does this id exist and why can't I see it" in a form that returns no data; a bug or injection in the API could use it as an existence oracle (one bit, the same bit the audit log records). Documented and tested; the rules in SQL are a third copy of the read rule, covered by the same parity discipline.
 
 ## ADR-21: Attachments on a plain filesystem volume, bytes decide the type, row security follows the parent
 

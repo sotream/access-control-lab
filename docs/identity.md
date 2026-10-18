@@ -79,7 +79,7 @@ Keycloak constraint found: each LoA level may appear only once per flow (a dupli
 
 ## Verification
 
-`pnpm test:identity` (needs `docker compose up -d --wait` and `.env`): 39 tests that log in through the real HTML forms
+`pnpm test:identity` (needs `docker compose up -d --wait` and `.env`): tests that log in through the real HTML forms
 with PKCE and TOTP and assert claims, MFA, redirect and PKCE rejection, code single use, refresh rotation and reuse,
 admin-only attributes, brute-force lockout, and the realm baseline read back from the admin API. Runs in CI job `identity`.
 
