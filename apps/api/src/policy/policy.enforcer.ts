@@ -3,6 +3,7 @@ import { ModuleRef } from "@nestjs/core";
 import { evaluate, evaluateRole, type Decision, type Environment, type Resource, type Subject } from "@acl/policy";
 import { CONFIG, type AppConfig } from "../config.js";
 import { ServiceUnavailableException } from "@nestjs/common";
+import { sanitizeText } from "@acl/audit";
 import { AUDIT_WRITER, decisionEntry, type AuditWriter } from "../audit/audit.js";
 import { StepUpRequired } from "../http/errors.js";
 import { refusalFor } from "./refusal.js";
@@ -25,6 +26,12 @@ export const toSubject = (p: Principal): Subject => ({
   unit: p.unit,
   compartments: p.compartments,
 });
+
+/** the id the client asked for, if it is shaped like an id (audit rows only hold such values; hostile strings are dropped, not stored) */
+const requestedId = (req: AppRequest): string | undefined => {
+  const id = (req.params as Record<string, unknown> | undefined)?.id;
+  return typeof id === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(id) ? id : undefined;
+};
 
 /** `::ffff:127.0.0.1` and `127.0.0.1` are the same client */
 const normalize = (ip: string | undefined) => (ip ?? "").replace(/^::ffff:/, "");
@@ -49,7 +56,9 @@ export class PolicyEnforcer {
       networkZone: this.cfg.managedAddresses.includes(normalize(req.ip)) ? "managed" : "unmanaged",
       ...(header === undefined
         ? {}
-        : { breakGlass: { justification: (Array.isArray(header) ? header.join(", ") : header).trim().slice(0, MAX_JUSTIFICATION) } }),
+        : // control and bidi characters become spaces, whitespace collapses: the cleaned text is what the policy, the database context and the audit row all see.
+          // A header that is empty after cleaning stays an (empty) request, which the policy refuses.
+          { breakGlass: { justification: sanitizeText(Array.isArray(header) ? header.join(", ") : header, MAX_JUSTIFICATION) ?? "" } }),
     };
   }
 
@@ -73,10 +82,12 @@ export class PolicyEnforcer {
         // same refusal as a hidden resource: nonexistent and forbidden are indistinguishable to the client
         // unless the only thing in the way is MFA for a file this subject is cleared for (the loader can tell)
         if (loader.revealedByStepUp && (await loader.revealedByStepUp(req))) {
-          await this.record(req, p, access.action, undefined, "deny", "STEP_UP_REQUIRED", ["abac.step-up"], ["step-up"]);
+          await this.record(req, p, access.action, requestedId(req), "deny", "STEP_UP_REQUIRED", ["abac.step-up"], ["step-up"]);
           throw new StepUpRequired("mfa");
         }
-        await this.record(req, p, access.action, undefined, "deny", "RESOURCE_NOT_FOUND", ["resource.not-found"], []);
+        // the client gets 404 either way; the audit log gets the real reason when the loader can tell (clearance, compartment, role)
+        const why = (loader.hiddenReason && (await loader.hiddenReason(req))) || "RESOURCE_NOT_FOUND";
+        await this.record(req, p, access.action, requestedId(req), "deny", why, [why === "RESOURCE_NOT_FOUND" ? "resource.not-found" : "rls.hidden"], []);
         throw new NotFoundException();
       }
       decision = evaluate(subject, access.action, resource, env);

@@ -1,8 +1,10 @@
 // The audit tables as the database enforces them: who may do what, append-only, linear chain, serialised writers (T-24, T-26).
+import { randomUUID } from "node:crypto";
+import { evaluate } from "@acl/policy";
 import { GENESIS_HASH_HEX, DETAIL_KEYS, appendAudit, buildRow, verifyChain, rowFromDb, type AuditEntry, type AuditRow } from "@acl/audit";
 import pg from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { adminPool, appPool, appUrl, auditKeys, auditPool, auditUrl, ctxOf, envOf, migratorUrl, probe, resetAudit, subjectOf, webDbUrl, webPool } from "./db.js";
+import { MFA_ENV, adminPool, appPool, appUrl, auditKeys, auditPool, auditUrl, ctxOf, envOf, migratorUrl, probe, resetAudit, subjectOf, webDbUrl, webPool } from "./db.js";
 
 const admin = adminPool();
 const app = appPool(6);
@@ -278,10 +280,61 @@ describe("hostile or malformed rows are refused by the table itself (T-14, T-24)
   });
 });
 
-describe("the one SECURITY DEFINER function, and what else is allowed to be one", () => {
-  it("exactly audit_chain_guard: a trigger function, pinned search_path, owned by the migrator", async () => {
-    const r = await admin.query("SELECT proname, pg_get_userbyid(proowner) AS owner, proconfig::text AS cfg, prorettype::regtype::text AS ret FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prosecdef");
-    expect(r.rows).toEqual([{ proname: "audit_chain_guard", owner: "casefile_migrator", cfg: '{"search_path=pg_catalog, public"}', ret: "trigger" }]);
+describe("the SECURITY DEFINER functions: exactly two, each pinned and narrow", () => {
+  it("audit_chain_guard (trigger, owned by the migrator) and audit_read_denial_reason (owned by the NOLOGIN lookup role); search_path pinned", async () => {
+    const r = await admin.query("SELECT proname, pg_get_userbyid(proowner) AS owner, proconfig::text AS cfg, prorettype::regtype::text AS ret FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prosecdef ORDER BY proname");
+    expect(r.rows).toEqual([
+      { proname: "audit_chain_guard", owner: "casefile_migrator", cfg: '{"search_path=pg_catalog, public"}', ret: "trigger" },
+      { proname: "audit_read_denial_reason", owner: "casefile_lookup", cfg: '{"search_path=pg_catalog, public"}', ret: "text" },
+    ]);
+  });
+
+  it("the lookup role cannot log in and can see three columns of case_files and the role matrix, nothing else", async () => {
+    const role = (await admin.query("SELECT rolcanlogin, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'casefile_lookup'")).rows[0];
+    expect(role).toEqual({ rolcanlogin: false, rolsuper: false, rolbypassrls: false });
+    const cols = await admin.query("SELECT table_name, column_name, privilege_type FROM information_schema.column_privileges WHERE grantee = 'casefile_lookup' ORDER BY table_name, column_name, privilege_type");
+    expect(cols.rows.filter((r) => r.table_name === "case_files").map((r) => `${r.column_name}:${r.privilege_type}`)).toEqual(["classification:SELECT", "compartments:SELECT", "id:SELECT"]);
+    const tables = await admin.query("SELECT table_name, privilege_type FROM information_schema.role_table_grants WHERE grantee = 'casefile_lookup' AND table_schema = 'public' ORDER BY 1, 2");
+    expect(tables.rows.every((r) => ["case_files", "role_grants"].includes(r.table_name) && r.privilege_type === "SELECT")).toBe(true);
+    const schema = await admin.query("SELECT has_schema_privilege('casefile_lookup', 'public', 'CREATE') AS c");
+    expect(schema.rows[0].c).toBe(false); // the temporary CREATE used to hand over the function was revoked again
+  });
+
+  it("only the API role may call the denial-reason function; the web and verifier roles and PUBLIC may not", async () => {
+    expect((await sql1(webDbUrl(), "SELECT audit_read_denial_reason(gen_random_uuid())")).ok).toBe(false);
+    expect((await sql1(auditUrl(), "SELECT audit_read_denial_reason(gen_random_uuid())")).ok).toBe(false);
+    const bare = await sql1(appUrl(), "SELECT audit_read_denial_reason(gen_random_uuid()) AS r");
+    expect(bare.ok && bare.r.rows[0].r).toBe("INVALID_INPUT"); // no request context: no answer about any file
+  });
+
+  it("it returns only reason codes and agrees with packages/policy on a grid (parity)", async () => {
+    await admin.query("TRUNCATE case_files");
+    const files: { id: string; classification: string; compartments: string[] }[] = [];
+    for (const classification of ["OFFICIAL", "CONFIDENTIAL", "SECRET"])
+      for (const compartments of [[], ["A"], ["A", "B"]]) {
+        const id = randomUUID();
+        await admin.query("INSERT INTO case_files (id, title, classification, unit, compartments, status, author_id, submitted_by_id) VALUES ($1, 't', $2::classification, 'alpha', $3::text[], 'approved', 'a', 's')", [id, classification, compartments]);
+        files.push({ id, classification, compartments });
+      }
+    const codes = new Set<string>();
+    for (const roles of [["analyst"], ["reviewer"], ["unit-admin"], ["auditor"], ["platform-admin"], ["ghost"], []])
+      for (const clearance of ["OFFICIAL", "CONFIDENTIAL", "SECRET"])
+        for (const compartments of [[], ["A"], ["B"], ["A", "B"]])
+          for (const mfa of [false, true]) {
+            const s = subjectOf({ roles, clearance, compartments });
+            const e = envOf(mfa ? { ...MFA_ENV } : {});
+            await probe(app, ctxOf(s, e, "read"), async (tx) => {
+              for (const f of files) {
+                const got = (await tx.query<{ r: string }>("SELECT audit_read_denial_reason($1) AS r" as never, [f.id])).rows[0]!.r;
+                const d = evaluate(s, "read", { id: f.id, classification: f.classification, ownerUnit: "alpha", compartments: f.compartments, status: "approved", authorId: "a", submittedById: "s" }, e);
+                codes.add(got);
+                expect(got, `${roles}/${clearance}/${compartments}/${mfa}/${f.classification}${f.compartments}`).toBe(d.effect === "allow" ? "ALLOWED" : d.reason);
+              }
+              expect((await tx.query<{ r: string }>("SELECT audit_read_denial_reason($1) AS r" as never, [randomUUID()])).rows[0]!.r).toBe("RESOURCE_NOT_FOUND");
+            });
+          }
+    expect([...codes].sort()).toEqual(["ALLOWED", "CLEARANCE_TOO_LOW", "COMPARTMENT_MISSING", "ROLE_NOT_PERMITTED", "STEP_UP_REQUIRED"]);
+    await admin.query("TRUNCATE case_files");
   });
 
   it("nobody can call it directly", async () => {

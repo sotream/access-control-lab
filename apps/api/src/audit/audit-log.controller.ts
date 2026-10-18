@@ -18,7 +18,7 @@ export class AuditQuery {
   @IsOptional() @IsIn(["allow", "deny"]) effect?: string;
   @IsOptional() @IsString() @MaxLength(100) cursor?: string;
   /** digits only; parsed below (validation runs without transformation) */
-  @IsOptional() @Matches(/^[1-9]\d{0,2}$/) limit?: string;
+  @IsOptional() @Matches(/^([1-9]\d?|[1-4]\d\d|500)$/) limit?: string;
   @IsOptional() @IsIn(["ndjson", "csv"]) format?: "ndjson" | "csv";
 }
 

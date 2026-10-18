@@ -49,6 +49,7 @@ const view = (r: CaseFileRow, withBody: boolean): CaseFileView => ({
 
 const MFA_PROBE = sql`SELECT set_config('app.acr', 'mfa', true), set_config('app.amr', 'pwd,otp', true), set_config('app.break_glass', 'off', true)`;
 const EXISTS_ONE = sql`SELECT 1 AS one FROM case_files WHERE id = $1`;
+const DENIAL_REASON = sql`SELECT audit_read_denial_reason($1) AS reason`;
 const SAVEPOINT = sql`SAVEPOINT stepup_probe`;
 const ROLLBACK_TO = sql`ROLLBACK TO SAVEPOINT stepup_probe`;
 
@@ -98,12 +99,20 @@ export class CaseFileService {
     }
   }
 
+  /** Why a file the caller cannot read was hidden: the policy's own reason code, from the database. For the AUDIT LOG only; the client sees 404. */
+  private async denialReason(tx: Tx, id: string): Promise<string> {
+    if (!UUID.test(id)) return "RESOURCE_NOT_FOUND";
+    const r = (await tx.query<{ reason: string }>(DENIAL_REASON, [id])).rows[0]?.reason;
+    return r && /^[A-Z_]{1,40}$/.test(r) ? r : "RESOURCE_NOT_FOUND";
+  }
+
   /** visible for the advisory check in the route guard; read-only */
-  async peek(c: Caller, id: string): Promise<{ row?: CaseFileRow; revealedByStepUp: boolean }> {
+  async peek(c: Caller, id: string): Promise<{ row?: CaseFileRow; revealedByStepUp: boolean; denialReason?: string }> {
     return this.run(c, "read", async (tx) => {
       const row = await this.repo.get(tx, id);
       if (row) return { row, revealedByStepUp: false };
-      return { revealedByStepUp: await this.stepUpWouldReveal(tx, c, id) };
+      const denialReason = await this.denialReason(tx, id);
+      return { revealedByStepUp: await this.stepUpWouldReveal(tx, c, id), denialReason };
     });
   }
 
@@ -134,7 +143,9 @@ export class CaseFileService {
         this.log(c, action, id, { effect: "deny", reason: "STEP_UP_REQUIRED", matchedRules: ["abac.step-up"], obligations: ["step-up"] }, audits);
         throw new StepUpRequired("mfa");
       }
-      this.log(c, action, id, { effect: "deny", reason: "RESOURCE_NOT_FOUND", matchedRules: ["resource.not-found"], obligations: [] }, audits);
+      // the client gets 404 either way; the audit log gets the real reason (clearance, compartment, role, or really not found)
+      const why = await this.denialReason(tx, id);
+      this.log(c, action, id, { effect: "deny", reason: why, matchedRules: [why === "RESOURCE_NOT_FOUND" ? "resource.not-found" : "rls.hidden"], obligations: [] }, audits);
       throw new NotFoundException();
     }
     const resource = toResource(row);

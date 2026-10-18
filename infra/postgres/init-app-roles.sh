@@ -27,6 +27,11 @@ CREATE ROLE casefile_audit LOGIN PASSWORD :'audit_pass' NOSUPERUSER NOCREATEDB N
 ALTER ROLE casefile_audit SET statement_timeout = '60s';
 ALTER ROLE casefile_audit SET idle_in_transaction_session_timeout = '30s';
 
+-- owner of exactly one function (audit_read_denial_reason): it may see three columns of case_files so the API can LOG the true reason a hidden file was hidden.
+-- It cannot log in. The migrator is a member only so that migration 004 can assign the function to it.
+CREATE ROLE casefile_lookup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
+GRANT casefile_lookup TO casefile_migrator WITH INHERIT FALSE, SET TRUE; -- membership without inheriting its row access: the owner stays blind
+
 -- guard rails that apply to every connection of the app role, whatever the pool does
 ALTER ROLE casefile_app SET statement_timeout = '5s';
 ALTER ROLE casefile_app SET lock_timeout = '3s';
@@ -41,7 +46,7 @@ for db in "$POSTGRES_DB" "${POSTGRES_DB}_test"; do
 REVOKE CONNECT ON DATABASE :"db" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"db" TO casefile_migrator, casefile_app, casefile_web, casefile_audit;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
-GRANT USAGE ON SCHEMA public TO casefile_app, casefile_web, casefile_audit;
+GRANT USAGE ON SCHEMA public TO casefile_app, casefile_web, casefile_audit, casefile_lookup;
 GRANT ALL ON SCHEMA public TO casefile_migrator;
 SQL
 done
