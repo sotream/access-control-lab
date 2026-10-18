@@ -76,9 +76,9 @@ Limits are in memory and per process (**ponytail**: shared store needed for seve
 
 ## Tests
 
-- `pnpm test` (apps/api, 96 unit tests, locally generated keys and a fake JWKS server): tokens, rotation, claims, routes, HTTP hardening, config.
+- `pnpm test` (apps/api, unit tests, locally generated keys and a fake JWKS server): tokens, rotation, claims, routes, HTTP hardening, config.
 - `pnpm test:identity` (needs compose): `api-auth.test.ts` boots the API against the live realm and checks every seed user, plus real ID,
-  refresh, other-client and master-realm tokens, tampering and log hygiene. 17 tests.
+  refresh, other-client and master-realm tokens, tampering and log hygiene.
 - Mutation check done by hand: removing the algorithm allow-list, `typ`, `kid`, `aud`, default deny, clearance enum, duplicate-header
   check, `forbidNonWhitelisted` or the CORS allow-list each made at least one test fail.
 
