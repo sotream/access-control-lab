@@ -26,12 +26,13 @@ const variants: Variant[] = [
   ["Origin of another site", (c) => ({ headers: { origin: "https://evil.example", "sec-fetch-site": "cross-site" }, fields: { csrf: c } })],
   ["Origin null", (c) => ({ headers: { origin: "null" }, fields: { csrf: c } })],
   ["Origin of the same host on another port", (c) => ({ headers: { origin: "http://127.0.0.1:3001" }, fields: { csrf: c } })],
-  ["correct Origin but no token", () => ({ headers: {}, fields: {} })],
-  ["correct Origin, wrong token", () => ({ headers: {}, fields: { csrf: "x".repeat(43) } })],
-  ["token of another user's session", (_c, o) => ({ headers: {}, fields: { csrf: o } })],
-  ["correct Origin and token but cross-site fetch metadata", (c) => ({ headers: { "sec-fetch-site": "cross-site" }, fields: { csrf: c } })],
-  ["correct Origin and token but same-site (sibling) fetch metadata", (c) => ({ headers: { "sec-fetch-site": "same-site" }, fields: { csrf: c } })],
-  ["token only in the query string", (c) => ({ headers: {}, fields: {}, query: `?csrf=${c}` })],
+  ["same-origin Origin but sec-fetch-site none (typed URL / bookmark)", (c) => ({ headers: { origin: WEB, "sec-fetch-site": "none" }, fields: { csrf: c } })],
+  ["correct Origin but no token", () => ({ headers: { origin: WEB }, fields: {} })],
+  ["correct Origin, wrong token", () => ({ headers: { origin: WEB }, fields: { csrf: "x".repeat(43) } })],
+  ["token of another user's session", (_c, o) => ({ headers: { origin: WEB }, fields: { csrf: o } })],
+  ["correct Origin and token but cross-site fetch metadata", (c) => ({ headers: { origin: WEB, "sec-fetch-site": "cross-site" }, fields: { csrf: c } })],
+  ["correct Origin and token but same-site (sibling) fetch metadata", (c) => ({ headers: { origin: WEB, "sec-fetch-site": "same-site" }, fields: { csrf: c } })],
+  ["token only in the query string", (c) => ({ headers: { origin: WEB }, fields: {}, query: `?csrf=${c}` })],
 ];
 
 describe("CSRF: every state-changing route refuses forged requests (T-05)", () => {
@@ -136,7 +137,7 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
     await api?.stop();
     api = undefined;
     stub = await startStubApi((s): { status: number; headers?: Record<string, string>; body?: string; delayMs?: number } => {
-      if (mode.redirect) return { status: 302, headers: { location: "http://127.0.0.1:1/stolen" } };
+      if (mode.redirect) return { status: 302, headers: { location: "http://127.0.0.1:3998/stolen" } };
       if (mode.huge) return { status: 200, body: JSON.stringify({ blob: "x".repeat(3 * 1024 * 1024) }) };
       if (mode.slow) return { status: 200, delayMs: 12_000 };
       if (mode.stepUp) return { status: 403, headers: { "www-authenticate": 'Bearer realm="casefile-api", error="insufficient_user_authentication", acr_values="mfa"' }, body: JSON.stringify({ statusCode: 403, error: "Forbidden", code: "STEP_UP_REQUIRED" }) };
@@ -250,13 +251,23 @@ describe("proxy behaviour against a recording upstream (T-12, T-13, T-27)", () =
     expect(seen).toHaveLength(0);
   });
 
-  it("a redirect from the upstream is never followed", async () => {
+  it("a redirect from the upstream is never followed (the redirect target receives nothing)", async () => {
     reset();
     mode.redirect = true;
-    const r = await b.req("/bff/me");
-    expect(r.status).toBe(502);
-    expect(r.headers.get("location")).toBeNull();
-    expect(seen).toHaveLength(1);
+    const hits: string[] = [];
+    const { createServer } = await import("node:http");
+    const target = createServer((req, res) => (hits.push(`${req.method} ${req.url} auth=${req.headers.authorization ?? "-"}`), res.end("stolen")));
+    await new Promise<void>((r) => target.listen(3998, "127.0.0.1", r));
+    try {
+      const r = await b.req("/bff/me");
+      expect(r.status).toBe(502);
+      expect(r.headers.get("location")).toBeNull();
+      expect(r.text).not.toContain("stolen");
+      expect(seen).toHaveLength(1);
+      expect(hits).toEqual([]); // the bearer token never travelled to the redirect target
+    } finally {
+      await new Promise<void>((r) => target.close(() => r()));
+    }
   });
 
   it("an oversized upstream response is cut off (502), not buffered without bound", async () => {

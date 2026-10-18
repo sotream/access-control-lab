@@ -110,3 +110,33 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
   told apart by a savepoint probe that pretends MFA and returns only a boolean.
 - **Consequences.** Writes take a row lock, so a slow client request cannot hold it for long (statement and idle-in-transaction timeouts). The decision runs twice per request; the cost is small
   and the guard decision is never trusted for the write.
+
+## ADR-13: `openid-client` for the OIDC flow in the BFF
+
+- **Context.** A hand-written authorization code flow is where `state`, `nonce`, PKCE and ID token validation mistakes live (T-02, T-03).
+- **Decision.** `openid-client` 6.8.8 (exact pin; built on `oauth4webapi`, by the author of `jose`). It performs discovery against the pinned issuer, builds the authorization URL, checks `state`, the RFC 9207 `iss` parameter,
+  PKCE, ID token signature, `iss`, `aud`, `nonce` and expiry, and does the token and refresh grants and the end-session URL. Our code adds what a library cannot know: where `state`/`nonce`/verifier live (an encrypted single-use cookie),
+  the return-to allow-list, the session model.
+- **Alternatives.** `oauth4webapi` directly (lower level, we would re-implement the glue), `next-auth`/Auth.js (opinionated session handling, JWT-in-cookie defaults that conflict with server-side token storage), hand-rolled (rejected).
+- **Consequences.** Plain http to the identity provider needs the library's explicit `allowInsecureRequests`, enabled only for a loopback issuer (dev).
+
+## ADR-14: Sessions in Postgres, encrypted, dedicated role
+
+- **Context.** Tokens must not reach the browser, and a restart or a second instance must not log everyone out. A signed cookie holding tokens (stateless) would put them in the browser; an in-memory store loses sessions and cannot enforce revoke-all across instances.
+- **Decision.** Table `bff_sessions` in the existing Postgres, owned by the migrator, accessed only by role `casefile_web` (and invisible to `casefile_app`, which cannot see it either way). The cookie carries only a random id; the row stores its SHA-256, so a database dump yields no usable cookie.
+  Tokens are AES-256-GCM encrypted with a key ring from the environment (key id per row, AAD bound to the row). Refresh runs under a row lock. Cap per user, idle and absolute expiry, revoke-all on logout.
+- **Alternatives.** Redis (another component to secure and operate), in-memory behind an interface (single instance, loses sessions, no cross-process lock), signed JWT session cookie (tokens in the browser).
+- **Consequences.** Every request does a primary-key lookup (cheap). The key ring is a secret to manage (stage 8); a compromised BFF can use live sessions.
+
+## ADR-15: CSRF scheme: synchronizer token + Origin + Sec-Fetch-Site on top of SameSite=Lax
+
+- **Context.** The session cookie authenticates state-changing requests, so forged cross-site requests must fail even where SameSite is unreliable (same-site subdomains, old browsers, GET-to-POST gadgets).
+- **Decision.** Every state-changing BFF route requires an `Origin` equal to our origin (absent means refused), `Sec-Fetch-Site: same-origin` when present, and a per-session synchronizer token compared in constant time (hidden form field or `X-CSRF-Token`). Logout is POST only and covered too. The token is delivered inside server-rendered pages and by `GET /api/auth/session`, both unreadable cross-origin.
+- **Alternatives.** Double-submit cookie (a planted sibling-subdomain cookie defeats it unless signed), SameSite alone, Origin alone (header can be missing behind some proxies), Next server actions' built-in check (only covers actions, not route handlers).
+- **Consequences.** A non-browser client must send an Origin header. Login (GET) is not CSRF-protected by a token; login CSRF is addressed by `state` and the single-use pre-auth cookie.
+
+## ADR-16: A narrow, explicit API client instead of a generic reverse proxy
+
+- **Context.** A BFF that forwards arbitrary paths and headers is an open proxy and an SSRF and header-smuggling surface (T-38).
+- **Decision.** One client builds every upstream request from scratch from an allow-list of nine method+path pairs against a fixed host. The browser's cookies, query string, forwarded and custom headers are never copied; the break-glass header exists only on its own route; responses are reduced to status, content type, `WWW-Authenticate` and `Retry-After`; size, time and redirect limits apply.
+- **Consequences.** Adding an API route to the UI is a one-line allow-list change plus a test, which is the point.
