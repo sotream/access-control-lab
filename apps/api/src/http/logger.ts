@@ -29,13 +29,18 @@ export class JsonLogger implements LoggerService {
   }
 
   // LoggerService (Nest internals and anything that calls Logger)
+  private text(message: unknown): string {
+    if (typeof message === "string") return String(redact(message));
+    if (message instanceof Error) return String(redact(`${message.name}: ${message.message}`)); // an Error has no enumerable fields
+    return String(redact(JSON.stringify(redact(message))));
+  }
   log(message: unknown) {
-    this.event("info", String(redact(typeof message === "string" ? message : JSON.stringify(redact(message)))));
+    this.event("info", this.text(message));
   }
   warn(message: unknown) {
-    this.event("warn", String(redact(typeof message === "string" ? message : JSON.stringify(redact(message)))));
+    this.event("warn", this.text(message));
   }
   error(message: unknown) {
-    this.event("error", String(redact(typeof message === "string" ? message : JSON.stringify(redact(message)))));
+    this.event("error", this.text(message));
   }
 }

@@ -15,6 +15,7 @@ export async function createApp(cfg: AppConfig, opts: { logger?: JsonLogger; ext
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(cfg, { logger, clock: opts.clock, controllers: opts.extraControllers, providers: opts.extraProviders }), {
     bodyParser: false,
     logger,
+    abortOnError: false, // a failing provider (e.g. an unsafe database role) rejects here instead of aborting the process; main() exits non-zero
   });
 
   app.use(requestContext(logger));

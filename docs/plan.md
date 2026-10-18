@@ -47,3 +47,7 @@ Added after stage 1 review ("maximum security, honest and verified"). Each item 
 Stage 4 delivered: `packages/policy` (pure evaluator, 100% coverage gate), `@Policy` enforcement in the API guard, decision log, 404/403 rule (docs/policy.md, ADR-9).
 Carried forward: stage 5 must pass the same read decision to SQL/RLS (`readFilter` parity) and decide-and-write in one transaction; stage 6 must design how the
 BFF conveys the client's network zone (today `MANAGED_ADDRESSES` on the socket address); stage 7 persists the `audit` obligation.
+
+Stage 5 delivered: Postgres schema with forced RLS and a guard trigger, migrator/app roles, decide-and-write in one transaction, parity tests against `packages/policy`
+(docs/data-layer.md, ADR-10..12). Carried forward: stage 6 must decide how the BFF conveys the client network zone; stage 7 persists the `audit` obligation and break-glass
+justification (append-only table, hash chain); stage 8 adds attachments/file storage threats (T-28..T-31), distributed rate limiting and TLS between components.

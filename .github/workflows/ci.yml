@@ -58,7 +58,11 @@ jobs:
         run: |
           cp .env.example .env
           docker compose up -d --wait --wait-timeout 300
+      - name: Migrate the dev database as casefile_migrator
+        run: pnpm db:migrate
       - run: pnpm test:identity
+      - name: Data layer tests (RLS, parity with the policy package, TOCTOU, pool hygiene, SQL injection)
+        run: pnpm test:db
       - name: Keycloak logs on failure
         if: failure()
         run: docker compose logs --no-color keycloak | tail -200

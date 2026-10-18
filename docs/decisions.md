@@ -71,3 +71,42 @@ Short ADR-style notes. Status of each is "accepted" unless stated. Claims about 
   conditions in a library, weaker default-deny story), 403 everywhere (simpler, but confirms which ids exist).
 - **Consequences.** A user who is legitimately refused a write on a file they cannot read sees 404, which can confuse support; the decision log carries the true reason.
   The reason codes are an API for logs and tests and must stay stable.
+
+## ADR-10: PostgreSQL access with `pg`, plain SQL migrations, no ORM
+
+- **Context.** The database layer is a security control. Query building and migration tooling should be small enough to read, with nothing that
+  assembles SQL behind our back (T-14).
+- **Decision.** `pg` (node-postgres, exact pin) with parameterised queries only. SQL is written through a tagged template `sql\`...\`` that accepts no
+  substitutions (compile error and runtime error), so values can only travel as `$n`. An ESLint rule and a test (`tests/api-db/src/drift.test.ts`) forbid
+  SQL-looking template literals with interpolation anywhere in `apps/api/src`. Migrations are plain `.sql` files run by a ~60 line forward-only runner
+  (`apps/api/src/db/migrate.ts`): one transaction per file, SHA-256 recorded, an edited or missing applied file stops the run, a Postgres advisory lock serialises runners.
+- **Alternatives.** node-pg-migrate (more features, larger dependency tree, JS migration DSL we do not need), Prisma/Drizzle/Kysely (an ORM or query builder
+  makes row-level security and `set_config` per transaction awkward and adds a generated-SQL surface), Flyway/dbmate (another runtime or binary).
+- **Consequences.** We own the runner and its tests. No down migrations (a security schema is never "rolled back" by dropping policies); fixes are new migrations.
+  Row-mapping is hand written.
+
+## ADR-11: Row-Level Security as a second, independent implementation of the read and write rules
+
+- **Context.** One forgotten check in application code leaks rows (T-15). The policy package is the specification, but a bug in the app layer must not become a data leak.
+- **Decision.** `case_files` has RLS **enabled and forced**. The API connects as `casefile_app` (not owner, no BYPASSRLS, column-level grants, no DDL); migrations run as
+  `casefile_migrator` (owner). Policies read the request context from transaction-local settings (`set_config(..., is_local => true)`) written by the API in the same
+  transaction; missing, empty or malformed context denies everything. Read, create and delete are policies. Update, submit and approve are one UPDATE policy plus a
+  `BEFORE UPDATE` trigger, because the per-action rules need OLD and NEW (status transition, ownership, separation of duties). No `SECURITY DEFINER` function exists
+  (a test pins that); helpers are invoker functions with a pinned `search_path`. The RBAC matrix is data (`role_grants`) copied from the policy package and checked for drift by a test.
+  Policy-vs-database **parity tests** (grid and property based) fail the build when the two implementations disagree; intentional differences are listed in code.
+- **Alternatives.** Application checks only (single point of failure), `SECURITY DEFINER` API functions (a second privileged code path), per-user Postgres roles (does not fit
+  a pooled API and Keycloak-issued identities), RLS keyed on `current_user`.
+- **Consequences.** Two implementations to keep in step (the parity tests are the price and the evidence). The application can still lie about the context: RLS protects against
+  missing checks, wrong queries and injected SQL, not against code that deliberately sets someone else's identity (that code runs as the same role). FORCE means even the owner sees
+  nothing without a context, so dev data and test fixtures are written as the dev superuser, never as the migrator.
+
+## ADR-12: Decide and write in one transaction, on the locked row
+
+- **Context.** The stage 4 fixture decided in the guard and wrote later: a check/use race (T-35).
+- **Decision.** Each case-file operation is one transaction: set context, `SELECT ... FOR UPDATE` the row, evaluate the policy on that locked row, write with an optimistic
+  `version` condition, commit. The route guard's decision stays as an advisory fast refusal and for the 404/403 choice; the service repeats the decision authoritatively. A second
+  transaction waits on the row lock (`lock_timeout` 3 s, then 409) and decides on the new state. If the app allows but the database refuses, the caller gets 403 and an error is
+  logged (the two layers disagree). Existence hiding with RLS: a row the caller cannot read is invisible to the query, so it is 404 by construction; a cleared caller without MFA is
+  told apart by a savepoint probe that pretends MFA and returns only a boolean.
+- **Consequences.** Writes take a row lock, so a slow client request cannot hold it for long (statement and idle-in-transaction timeouts). The decision runs twice per request; the cost is small
+  and the guard decision is never trusted for the write.

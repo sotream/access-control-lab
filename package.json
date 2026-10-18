@@ -7,11 +7,14 @@
     "pnpm": ">=12"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-invisible-chars.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "test:identity": "pnpm --filter @acl/identity-tests test:identity"
+    "test:identity": "pnpm --filter @acl/identity-tests test:identity",
+    "test:db": "pnpm --filter @acl/api-db-tests test:db",
+    "db:migrate": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api migrate",
+    "db:seed": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api seed"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

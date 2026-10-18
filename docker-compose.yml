@@ -10,11 +10,14 @@ services:
       KEYCLOAK_DB_NAME: ${KEYCLOAK_DB_NAME:?set in .env}
       KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER:?set in .env}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set in .env}
+      CASEFILE_MIGRATOR_PASSWORD: ${CASEFILE_MIGRATOR_PASSWORD:?set in .env}
+      CASEFILE_APP_PASSWORD: ${CASEFILE_APP_PASSWORD:?set in .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/init-keycloak-db.sh:/docker-entrypoint-initdb.d/10-keycloak-db.sh:ro
+      - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/20-app-roles.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
