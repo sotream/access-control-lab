@@ -14,7 +14,8 @@
     "test:identity": "pnpm --filter @acl/identity-tests test:identity",
     "test:db": "pnpm --filter @acl/api-db-tests test:db",
     "db:migrate": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api migrate",
-    "db:seed": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api seed"
+    "db:seed": "pnpm --filter '@acl/api...' build && pnpm --filter @acl/api seed",
+    "test:bff": "pnpm --filter '@acl/web' build && pnpm --filter @acl/bff-tests test:bff"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

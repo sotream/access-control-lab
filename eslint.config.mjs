@@ -6,7 +6,7 @@ export default tseslint.config(
   {
     // No string-built SQL: values reach Postgres only as $n parameters (stage 5, T-14). The same check runs as a test
     // (tests/api-db/src/drift.test.ts) so it cannot be turned off by editing this file alone.
-    files: ["apps/api/src/**/*.ts"],
+    files: ["apps/api/src/**/*.ts", "apps/web/src/**/*.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
