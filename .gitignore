@@ -13,3 +13,4 @@ next-env.d.ts
 tests/identity/.cache/
 data/
 .claude/
+secrets-dev/

@@ -1,0 +1,6 @@
+# TEST ONLY (docker-compose.prod-like.test.yml): shows the request headers exactly as the BFF would receive them.
+handle /__echo {
+	reverse_proxy echo:9000 {
+		import to_bff
+	}
+}

@@ -1,0 +1,24 @@
+# Test-only additions to the prod-like stack (scripts/prod-like-test.mjs): an echo upstream and a route to it, to observe what the proxy passes on.
+# Never part of a deployment: `docker compose -f docker-compose.prod-like.yml -f docker-compose.prod-like.test.yml up -d`
+services:
+  caddy:
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/test:/etc/caddy/extra:ro # replaces the (empty) extra directory of the main file
+      - ./secrets-dev/prod-like/tls.crt:/certs/tls.crt:ro
+      - ./secrets-dev/prod-like/tls.key:/certs/tls.key:ro
+    depends_on:
+      echo: { condition: service_started }
+  echo:
+    image: node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    networks: [app]
+    command:
+      - node
+      - -e
+      - "require('http').createServer((q,r)=>{r.setHeader('content-type','application/json');r.end(JSON.stringify(q.headers))}).listen(9000)"
+    mem_limit: 64m
+    pids_limit: 32

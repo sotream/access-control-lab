@@ -1,0 +1,15 @@
+.git
+.claude
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.env
+.env.*
+!.env.example
+secrets-dev
+docs
+tests
+graphify-out
+*.log
