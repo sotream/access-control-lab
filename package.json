@@ -7,7 +7,7 @@
     "pnpm": ">=12"
   },
   "scripts": {
-    "lint": "eslint . && node scripts/check-invisible-chars.mjs && node scripts/check-trivyignore.mjs",
+    "lint": "eslint . && node scripts/check-invisible-chars.mjs && node scripts/check-trivyignore.mjs && node scripts/check-zap-allow.mjs",
     "typecheck": "pnpm --filter @acl/audit --filter @acl/netguard build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",

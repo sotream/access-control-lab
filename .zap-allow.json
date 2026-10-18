@@ -1,0 +1,4 @@
+{
+  "_policy": "Exceptions to the OWASP ZAP baseline gate (tests/attack/src/zap.test.ts). Medium and High alerts fail the run unless listed here with the ZAP plugin id, a reason of at least 20 characters and an expiry (YYYY-MM-DD, at most 90 days ahead). scripts/check-zap-allow.mjs (part of pnpm lint) rejects an entry without them, an expired one and a far one.",
+  "allow": []
+}
