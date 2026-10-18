@@ -5,7 +5,7 @@
   "scripts": {
     "css": "node scripts/build-css.mjs",
     "predev": "pnpm css",
-    "dev": "node --env-file-if-exists=../../.env ./node_modules/next/dist/bin/next dev -H 127.0.0.1",
+    "dev": "next dev -H 127.0.0.1",
     "prebuild": "pnpm css",
     "build": "next build",
     "start": "next start -H 127.0.0.1",

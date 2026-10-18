@@ -1,5 +1,15 @@
 import type { NextConfig } from "next";
 
+// development only: the dev server reads the repository's root .env (the API's scripts do the same). Never in a build or in production,
+// where configuration comes from the environment or from secret files; variables that are already set are not overridden.
+if (process.env.NODE_ENV === "development") {
+  try {
+    process.loadEnvFile(`${process.cwd()}/../../.env`);
+  } catch {
+    // no .env: the variables must come from the environment
+  }
+}
+
 const config: NextConfig = {
   poweredByHeader: false,
   // external: one instance of each in the Node module cache. Bundled, openid-client could end up as one copy per route bundle, and a Configuration made by one copy is refused by another ("config must be an instance of Configuration"), depending on which route ran first.
