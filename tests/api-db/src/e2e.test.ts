@@ -233,7 +233,7 @@ describe("break-glass over HTTP and in the database (T-25)", () => {
 });
 
 describe("SQL injection: hostile values are data (T-14)", () => {
-  const EVIL = ["'; DROP TABLE case_files; --", "' OR '1'='1", "\") ; DELETE FROM case_files; --", "$1 ${x} `backtick` \\ \\' %s", "Robert'); DROP TABLE Students;--", "\u{1F600} ‮", "x".repeat(100)];
+  const EVIL = ["'; DROP TABLE case_files; --", "' OR '1'='1", "\") ; DELETE FROM case_files; --", "$1 ${x} `backtick` \\ \\' %s", "Robert'); DROP TABLE Students;--", "\u{1F600} \u202e", "x".repeat(100)];
 
   it("title and body round-trip verbatim; the table is intact", async () => {
     const before = (await admin.query("SELECT count(*)::int AS n FROM case_files")).rows[0].n;
