@@ -15,6 +15,8 @@ export interface ResourceLoader {
    * If so the caller is cleared for it and gets the step-up challenge instead of 404. Optional.
    */
   revealedByStepUp?(req: AppRequest): Promise<boolean>;
+  /** the real reason a file the caller cannot read is hidden (clearance, compartment, role, not found): written to the audit log, never to the client */
+  hiddenReason?(req: AppRequest): Promise<string | undefined>;
 }
 
 /** `null`: no resource (lists, audit, user management); only the role is checked, the handler must filter rows. */

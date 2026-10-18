@@ -12,7 +12,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body>
         <header>
           <nav>
-            <a href="/">Home</a> | <a href="/cases">Case files</a> | <a href="/session">Session</a>
+            <a href="/">Home</a> | <a href="/cases">Case files</a> | <a href="/session">Session</a> | <a href="/audit">Audit</a>
             {session ? (
               <form method="post" action="/api/auth/logout" style={{ display: "inline" }}>
                 {" | "}

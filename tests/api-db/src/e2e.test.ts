@@ -11,7 +11,7 @@ import { JsonLogger } from "../../../apps/api/src/http/logger.js";
 import { sql } from "../../../apps/api/src/db/sql.js";
 import { CurrentPrincipal } from "../../../apps/api/src/http/request.js";
 import type { Principal } from "../../../apps/api/src/auth/principal.js";
-import { DB_POOL } from "../../../apps/api/src/casefiles/case-file.service.js";
+import { DB_POOL } from "../../../apps/api/src/db/tokens.js";
 import { decode, login, REALM_URL, type Tokens } from "../../identity/src/kc.js";
 import { SEED } from "../../identity/src/seed.js";
 import { adminPool, appUrl, clearRows, insertRow } from "./db.js";
@@ -76,7 +76,7 @@ beforeAll(async () => {
   await mk("secret-a", { classification: "SECRET", compartments: ["A"] });
   await mk("secret-b", { classification: "SECRET", compartments: ["B"] });
 
-  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", MANAGED_ADDRESSES: "127.0.0.1" });
+  const cfg = loadConfig({ KEYCLOAK_ISSUER: REALM_URL, DATABASE_URL: appUrl(), AUDIT_HMAC_KEYS: process.env.AUDIT_HMAC_KEYS!, THROTTLE_LIMIT: "100000", AUTH_FAIL_LIMIT: "10000", MANAGED_ADDRESSES: "127.0.0.1" });
   const app = await createApp(cfg, { logger: new JsonLogger((l) => logs.push(l)), clock: () => NOON, extraControllers: [BuggyController] });
   await app.listen(0, "127.0.0.1");
   url = `http://127.0.0.1:${(app.getHttpServer().address() as { port: number }).port}`;

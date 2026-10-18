@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { AuditUnavailable, auditAuth } from "../../../../src/server/audit";
 import { config } from "../../../../src/server/config";
 import { clearPreAuthCookie, openPreAuth } from "../../../../src/server/preauth";
 import { cookieAttrs, parseCookies, preAuthCookieName, sessionCookieName } from "../../../../src/server/cookies";
@@ -7,7 +8,8 @@ import { client, oidc, redirectUri } from "../../../../src/server/oidc";
 
 export const dynamic = "force-dynamic";
 
-const fail = (status: number) => {
+const fail = async (status: number, reason: string) => {
+  await auditAuth({ action: "auth.login_failed", effect: "deny", reason });
   const res = new NextResponse("Sign-in failed. Start again from the home page.", { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
   res.cookies.set(clearPreAuthCookie());
   return res;
@@ -21,7 +23,7 @@ const fail = (status: number) => {
 export async function GET(req: NextRequest) {
   const cookies = parseCookies(req.headers.get("cookie"));
   const pre = openPreAuth(cookies.get(preAuthCookieName()));
-  if (!pre) return fail(400);
+  if (!pre) return fail(400, "NO_PREAUTH");
 
   let tokens;
   try {
@@ -29,10 +31,20 @@ export async function GET(req: NextRequest) {
     const current = new URL(redirectUri() + req.nextUrl.search);
     tokens = await client.authorizationCodeGrant(await oidc(), current, { pkceCodeVerifier: pre.verifier, expectedState: pre.state, expectedNonce: pre.nonce, idTokenExpected: true });
   } catch {
-    return fail(400);
+    return fail(400, req.nextUrl.searchParams.has("error") ? "IDP_ERROR" : "CALLBACK_REJECTED");
   }
-  const sub = tokens.claims()?.sub;
-  if (typeof sub !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(sub)) return fail(400);
+  const claims = tokens.claims();
+  const sub = claims?.sub;
+  if (typeof sub !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(sub)) return fail(400, "SUB_INVALID");
+
+  // no audit row, no session: a sign-in that cannot be recorded does not happen
+  const acr = typeof claims?.acr === "string" && /^[A-Za-z0-9_.:-]{1,64}$/.test(claims.acr) ? claims.acr : undefined;
+  try {
+    await auditAuth({ action: pre.acr === "mfa" ? "auth.stepup" : "auth.login", actorSub: sub, effect: "allow", reason: "LOGIN_OK", details: { event: "login", ...(acr ? { acr } : {}) } }, true);
+  } catch (e) {
+    if (e instanceof AuditUnavailable) return new NextResponse("Sign-in is temporarily unavailable.", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+    throw e;
+  }
 
   const store = sessionStore();
   const old = cookies.get(sessionCookieName());

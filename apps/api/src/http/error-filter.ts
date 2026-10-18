@@ -14,6 +14,7 @@ const TEXT: Record<number, string> = {
   415: "Unsupported Media Type",
   429: "Too Many Requests",
   500: "Internal Server Error",
+  503: "Service Unavailable",
 };
 
 export const REALM = "casefile-api";

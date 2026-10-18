@@ -10,6 +10,8 @@ export interface WebConfig {
   databaseUrl: string;
   /** AES-256-GCM key ring: first entry encrypts, all decrypt */
   keyRing: string;
+  /** audit HMAC key ring (same value as the API): the BFF appends authentication events to the same chain */
+  auditKeys: string;
   cookieSecure: boolean;
   hsts: boolean;
   idleSeconds: number;
@@ -74,6 +76,7 @@ export function loadWebConfig(env: Env = process.env): WebConfig {
     apiBase: api.origin,
     databaseUrl,
     keyRing: need(env, "SESSION_ENCRYPTION_KEYS"),
+    auditKeys: need(env, "AUDIT_HMAC_KEYS"),
     cookieSecure,
     hsts: bool(env, "HSTS_ENABLED", o.protocol === "https:"),
     idleSeconds: int(env, "SESSION_IDLE_SECONDS", 1800, 60, 86_400),

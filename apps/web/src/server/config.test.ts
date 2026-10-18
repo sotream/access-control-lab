@@ -11,6 +11,7 @@ const base = {
   API_BASE_URL: "http://127.0.0.1:3001",
   WEB_DATABASE_URL: "postgres://u:p@127.0.0.1:5432/db",
   SESSION_ENCRYPTION_KEYS: KEY,
+  AUDIT_HMAC_KEYS: "audit-1:" + Buffer.alloc(32, 2).toString("base64"),
   COOKIE_SECURE: "false",
 };
 
@@ -57,6 +58,10 @@ describe("proxy allow-list (no open proxy, no SSRF)", () => {
     ["POST", `/case-files/${ID}/submit`],
     ["POST", `/case-files/${ID}/approve`],
     ["GET", `/case-files/${ID}/export`],
+    ["GET", "/audit-log"],
+    ["GET", "/audit-log/export"],
+    ["GET", "/audit-log/checkpoints"],
+    ["GET", "/audit-log/verify"],
   ])("%s %s is allowed", (m, p) => expect(allowed(m, p)).toBe(true));
   it.each([
     ["GET", "/health"],
@@ -77,6 +82,13 @@ describe("proxy allow-list (no open proxy, no SSRF)", () => {
     ["GET", "/ME"],
     ["get", "/me"],
     ["POST", `/case-files/${ID}/export`],
+    ["POST", "/audit-log"],
+    ["DELETE", "/audit-log"],
+    ["PUT", "/audit-log/export"],
+    ["GET", "/audit-log/"],
+    ["GET", "/audit-log/other"],
+    ["GET", "/audit-log/export/x"],
+    ["GET", "/audit-logs"],
   ])("%s %s is refused", (m, p) => expect(allowed(m, p)).toBe(false));
 });
 

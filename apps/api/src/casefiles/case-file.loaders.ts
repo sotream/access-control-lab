@@ -5,6 +5,8 @@ import { toResource } from "../db/case-file.repository.js";
 import type { AppRequest } from "../http/request.js";
 import { CaseFileService, type Caller } from "./case-file.service.js";
 
+type Peek = Awaited<ReturnType<CaseFileService["peek"]>>;
+
 export const callerOf = (req: AppRequest): Caller => {
   if (!req.policyContext) throw new Error("no policy context on the request"); // programming error: loader used outside @Policy
   return { ...req.policyContext, reqId: req.id };
@@ -14,18 +16,34 @@ export const callerOf = (req: AppRequest): Caller => {
 @Injectable()
 export class ExistingCaseFileLoader implements ResourceLoader {
   readonly existing = true;
+  /** one lookup per request: load, the step-up question and the audit reason all read the same result */
+  private readonly peeked = new WeakMap<AppRequest, Peek>();
+
   constructor(@Inject(CaseFileService) private readonly files: CaseFileService) {}
 
-  async load(req: AppRequest): Promise<Resource | undefined> {
+  private async peek(req: AppRequest): Promise<Peek | undefined> {
     const id = req.params.id;
     if (typeof id !== "string") return undefined;
-    const { row } = await this.files.peek(callerOf(req), id);
-    return row ? toResource(row) : undefined;
+    let p = this.peeked.get(req);
+    if (!p) {
+      p = await this.files.peek(callerOf(req), id);
+      this.peeked.set(req, p);
+    }
+    return p;
+  }
+
+  async load(req: AppRequest): Promise<Resource | undefined> {
+    const p = await this.peek(req);
+    return p?.row ? toResource(p.row) : undefined;
   }
 
   async revealedByStepUp(req: AppRequest): Promise<boolean> {
-    const id = req.params.id;
-    return typeof id === "string" ? (await this.files.peek(callerOf(req), id)).revealedByStepUp : false;
+    return (await this.peek(req))?.revealedByStepUp ?? false;
+  }
+
+  /** the policy's own reason for hiding the file, for the audit log only */
+  async hiddenReason(req: AppRequest): Promise<string | undefined> {
+    return (await this.peek(req))?.denialReason;
   }
 }
 

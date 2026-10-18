@@ -3,9 +3,15 @@ import type pg from "pg";
 import { CaseFileRepository } from "../db/case-file.repository.js";
 import { assertSafeRole, createPool } from "../db/pool.js";
 import type { AppConfig } from "../config.js";
+import { parseAuditKeys } from "@acl/audit";
+import { AUDIT_KEYS, AUDIT_WRITER, PgAuditWriter } from "../audit/audit.js";
+import { AuditLogController } from "../audit/audit-log.controller.js";
+import { AuditLogService } from "../audit/audit-log.service.js";
+import { CheckpointService } from "../audit/checkpoint.js";
 import { ExistingCaseFileLoader, NewCaseFileLoader } from "./case-file.loaders.js";
 import { CaseFilesController } from "./case-file.controller.js";
-import { CaseFileService, DB_POOL } from "./case-file.service.js";
+import { DB_POOL } from "../db/tokens.js";
+import { CaseFileService } from "./case-file.service.js";
 
 @Injectable()
 class PoolLifecycle implements OnModuleDestroy {
@@ -20,7 +26,7 @@ export function dataLayer(cfg: AppConfig): { controllers: Type[]; providers: Pro
   if (!cfg.databaseUrl) return { controllers: [], providers: [] };
   const url = cfg.databaseUrl;
   return {
-    controllers: [CaseFilesController],
+    controllers: [CaseFilesController, AuditLogController],
     providers: [
       {
         provide: DB_POOL,
@@ -31,6 +37,11 @@ export function dataLayer(cfg: AppConfig): { controllers: Type[]; providers: Pro
         },
       },
       PoolLifecycle,
+      { provide: AUDIT_KEYS, useValue: parseAuditKeys(cfg.auditKeys as string) },
+      PgAuditWriter,
+      { provide: AUDIT_WRITER, useExisting: PgAuditWriter },
+      CheckpointService,
+      AuditLogService,
       CaseFileRepository,
       CaseFileService,
       ExistingCaseFileLoader,

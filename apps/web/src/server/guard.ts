@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { config } from "./config";
+import { auditAuth } from "./audit";
 import { checkCsrf } from "./csrf";
 import { sessionFromCookieHeader } from "./session";
 import type { Session } from "./session-store";
@@ -12,6 +13,9 @@ export async function requireCsrfSession(req: Request, presented: string | null 
   const session = await sessionFromCookieHeader(req.headers.get("cookie"));
   if (!session) return { refusal: json(401, { error: "unauthenticated" }) };
   const failure = checkCsrf(req.headers, config().origin, session.csrfToken, presented);
-  if (failure) return { refusal: json(403, { error: "csrf" }) }; // the reason stays out of the response
+  if (failure) {
+    await auditAuth({ action: "auth.csrf_denied", actorSub: session.userSub, effect: "deny", reason: failure.toUpperCase() });
+    return { refusal: json(403, { error: "csrf" }) }; // the reason stays out of the response
+  }
   return { session };
 }
