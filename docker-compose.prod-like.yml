@@ -131,7 +131,7 @@ services:
   # one-shot: applies the migrations as the schema owner, then exits. The running services never hold this credential.
   migrate:
     <<: *hardened
-    restart: "no"
+    restart: on-failure:5 # the first attempt can race the database's own startup (DNS, init phase); five tries, then the stack does not start
     build: { context: ., dockerfile: Dockerfile.api }
     image: casefile-api:prod-like
     command: ["dist/db/migrate-cli.js"]
@@ -156,7 +156,7 @@ services:
     tmpfs: ["/tmp:uid=70,gid=70", "/run/postgresql:uid=70,gid=70"]
     networks: [data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"] # over TCP: the init-phase server listens on the socket only, so the stack is not "healthy" before the init scripts ran
       interval: 5s
       timeout: 3s
       retries: 20

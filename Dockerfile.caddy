@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+# The reverse proxy, built from the Caddy release with a current Go toolchain and a patched golang.org/x/net: the stock caddy image carried
+# Go standard library and x/net findings (HIGH, fix available) when this stage was written (docs/deployment.md). Standard modules only, no plugins.
+FROM golang:1.26-alpine@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade AS build
+ARG CADDY_VERSION=v2.11.7
+WORKDIR /src
+RUN go mod init caddybuild
+COPY infra/caddy/main.go.txt main.go
+RUN go get github.com/caddyserver/caddy/v2@${CADDY_VERSION} golang.org/x/net@v0.60.0 && go mod tidy \
+ && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /caddy .
+
+FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+COPY --from=build /caddy /usr/bin/caddy
+USER 65532:65532
+ENTRYPOINT ["/usr/bin/caddy"]
+CMD ["run", "--config", "/etc/caddy/Caddyfile"]

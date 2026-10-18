@@ -17,13 +17,13 @@ concurrency:
 
 jobs:
   codeql:
-    # Code scanning upload needs GitHub Advanced Security on private repos, so results stay local:
-    # SARIF is kept as an artifact and any finding fails the job.
+    # The repository is public: results are uploaded to code scanning (alerts, history) AND kept as an artifact, and any finding still fails this job.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
-      actions: read # codeql-action reads its own workflow run on private repos
+      actions: read # codeql-action reads its own workflow run
+      security-events: write # upload SARIF to code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,7 +35,7 @@ jobs:
           queries: security-extended
       - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
-          upload: never
+          upload: always
           output: sarif-results
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -61,9 +61,10 @@ jobs:
             --lockfile=pnpm-lock.yaml
 
   images:
-    # Compose-pinned images. HIGH/CRITICAL with an available fix fail the job.
+    # (1) the images this repository builds (api, web, keycloak, clamd, caddy) and (2) the third-party images the compose files pin.
+    # HIGH/CRITICAL with an available fix fail the job; every exception is in .trivyignore.yaml with a reason and an expiry. One CycloneDX SBOM per image is kept.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,21 +90,76 @@ jobs:
           CASEFILE_APP_PASSWORD: x
           CASEFILE_WEB_DB_PASSWORD: x
           CASEFILE_AUDIT_PASSWORD: x
+      - name: Build the images of this repository
+        run: |
+          docker build -f Dockerfile.api -t casefile-api:ci .
+          docker build -f Dockerfile.web -t casefile-web:ci .
+          docker build -f Dockerfile.keycloak -t casefile-keycloak:ci .
+          docker build -f Dockerfile.caddy -t casefile-caddy:ci .
+          docker build -f Dockerfile.clamd --build-arg "SIGNATURES_DATE=$(date +%F)" -t casefile-clamd:ci .
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: casefile-api:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: casefile-web:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: casefile-keycloak:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: casefile-caddy:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: casefile-clamd:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.refs.outputs.keycloak }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          trivyignores: .trivyignore.yaml
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.refs.outputs.postgres }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          trivyignores: .trivyignore.yaml
           # upstream postgres images ship a gosu built with an old Go stdlib (verified 2026-10-17 on 17.11 and 18.4);
           # gosu only runs once at container start to drop root. See docs/supply-chain.md.
           skip-files: usr/local/bin/gosu
+      - name: SBOM per image (CycloneDX)
+        run: |
+          mkdir -p sboms
+          for i in api web keycloak caddy clamd; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/sboms:/out" aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 image --format cyclonedx --output "/out/$i.cdx.json" "casefile-$i:ci"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-images
+          path: sboms
+          retention-days: 90
 
   workflows:
     runs-on: ubuntu-latest

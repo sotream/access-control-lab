@@ -76,7 +76,14 @@ const reachable = (port) =>
 // ------------------------------------------------------------------ bring the stack up
 console.log("starting the prod-like stack (first run builds the images)...");
 if (!fast) sh("node", ["scripts/prod-like-setup.mjs"]);
-dc("up", "-d", ...(fast ? [] : ["--build"]), "--wait", "--wait-timeout", "600");
+try {
+  dc("up", "-d", ...(fast ? [] : ["--build"]), "--wait", "--wait-timeout", "600");
+} catch (e) {
+  // a stack that does not come up is a failed check, with the reason, not a crash of the test
+  console.log(`FAIL  the stack comes up\n      ${String(e.stderr ?? e.message).split("\n").slice(-6).join("\n      ")}`);
+  if (!process.argv.includes("--keep")) tryRun("docker", [...compose, "down", "-v"]);
+  process.exit(1);
+}
 dc("restart", "caddy"); // picks up regenerated bind-mounted files on hosts that keep the old inode
 await new Promise((r) => setTimeout(r, 3000));
 
