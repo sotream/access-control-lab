@@ -1,6 +1,6 @@
 # Supply chain controls
 
-What exists, where it is enforced, and what is **unverified**. Stage 8 extended this: images are built here and scanned, SBOM per image, public-repo features are on (`docs/deployment.md`, `docs/asvs.md`).
+What exists, where it is enforced, and what is **unverified**. Images are built here and scanned, with one SBOM per image; the repository is public, so code scanning upload, dependency-review and Scorecard are on (`docs/deployment.md`, `docs/asvs.md`).
 
 | Control | Where | Notes |
 |---------|-------|-------|
@@ -9,7 +9,7 @@ What exists, where it is enforced, and what is **unverified**. Stage 8 extended 
 | Minimum release age 24h | `pnpm-workspace.yaml` `minimumReleaseAge` | pnpm 12.9.1 enforces it on frozen install (observed: a 7 day value failed the lockfile). Floor is low because the lockfile was resolved with recent releases |
 | Dependabot cooldown 7 days | `.github/dependabot.yml` | grouped minor/patch, weekly |
 | Actions pinned by SHA | all workflows | version in a comment; Dependabot updates them |
-| Least privilege tokens | `permissions: contents: read` top level | write scopes only on the inert automerge job |
+| Least privilege tokens | `permissions: contents: read` top level | write scopes only on the auto-merge job |
 | Image digests | `docker-compose.yml` | tag plus `@sha256`; digests taken 2026-10-17 |
 | CodeQL (security-extended) | `security.yml` | SARIF uploaded to code scanning and kept as an artifact; any finding fails the job |
 | OSV-Scanner | `security.yml` | lockfile; complements `pnpm audit --prod` |
@@ -17,9 +17,9 @@ What exists, where it is enforced, and what is **unverified**. Stage 8 extended 
 | actionlint, zizmor | `security.yml` | workflow correctness and workflow security |
 | gitleaks | `ci.yml` | full history |
 | SBOM CycloneDX | `ci.yml` artifact `sbom-cyclonedx`, `security.yml` artifact `sbom-images` | production dependencies, and one SBOM per image built here |
-| dependency-review | `dependency-review.yml` | pull requests, fails on HIGH |
-| OpenSSF Scorecard | `scorecard.yml` | main and weekly, published |
-| Dependabot auto-merge | `dependabot-automerge.yml` | inert until variable `DEPENDABOT_AUTOMERGE=true`, set only after main requires checks |
+| dependency-review | `dependency-review.yml` | pull requests, fails on HIGH; red until the owner enables the repository's Dependency graph setting |
+| OpenSSF Scorecard | `scorecard.yml` | main and weekly, published; has run successfully |
+| Dependabot auto-merge | `dependabot-automerge.yml` | minor and patch updates, only when variable `DEPENDABOT_AUTOMERGE=true` (it is) and the `protect-main` ruleset requires the checks |
 
 ## Known exceptions
 
@@ -28,4 +28,4 @@ What exists, where it is enforced, and what is **unverified**. Stage 8 extended 
   container start to drop root and is not network facing, so the Trivy step skips that single file. Everything else in
   the image is still gated. Revisit when upstream rebuilds gosu.
 - **Images built here are patched by building them.** The stock `caddy` and `clamav` images had 3 and 26 fixable HIGH/CRITICAL findings on 2026-10-18; `Dockerfile.caddy` and `Dockerfile.clamd` replace them (`docs/deployment.md`). The cost is that their rebuild schedule is ours.
-- **The repository is public**, so dependency-review, code scanning upload and Scorecard are on (they were not possible while it was private).
+- **The repository is public** (it was private while stages 1 to 7 were built), so dependency-review, code scanning upload and Scorecard are available and used.

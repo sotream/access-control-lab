@@ -59,18 +59,22 @@ Needs docker and openssl; first run builds the images (a few minutes), a later r
 
 | Workflow / job | What | Required check today |
 |----------------|------|----------------------|
-| `ci` / `check`, `identity`, `secret-scan` | unchanged | yes |
-| `ci` / `prod-like` | `node scripts/prod-like-test.mjs`: builds seven images, runs the stack, attacks it (about 10 to 15 minutes) | **no, proposed** |
-| `security` / `codeql` | CodeQL security-extended; results now **uploaded to code scanning** (public repo) and kept as an artifact; any finding still fails the job | yes |
-| `security` / `osv`, `workflows` | unchanged | yes |
-| `security` / `images` | builds api, web, keycloak, caddy, clamd; Trivy (HIGH/CRITICAL, fix available, `.trivyignore.yaml`) on those five and on the compose-pinned Keycloak and Postgres images; one CycloneDX SBOM per built image as the artifact `sbom-images` | yes (name unchanged, scope widened) |
-| `dependency-review` / `dependency-review` | `actions/dependency-review-action` on pull requests, fails on HIGH or worse | **no, proposed** |
-| `scorecard` / `scorecard` | OpenSSF Scorecard on main and weekly, published and uploaded to code scanning (v2.4.4; v2.5.0 was under a week old, release-age policy) | **no, proposed** (not meaningful as a PR gate) |
+| `ci` / `check`, `identity`, `secret-scan` | lint, typecheck, unit tests, build; the identity tests against a real Keycloak; gitleaks | yes |
+| `ci` / `prod-like` | `node scripts/prod-like-test.mjs`: builds the five images (api, web, keycloak, caddy, clamd), starts them with the pulled Postgres image, attacks the stack (about 4 to 15 minutes) | yes |
+| `ci` / `attack-tests` | the black-box attack suite and the ZAP baseline against the prod-like stack (`docs/attack-catalogue.md`) | yes |
+| `ci` / `e2e-browser` | Playwright with Chromium against the prod-like stack (`docs/ui.md`); about 5 minutes on a cold runner | **no, proposed** (the owner decides) |
+| `attack-nightly` | the attack suite with a random fuzz seed and the slow modes, every night | no (scheduled) |
+| `attack-mutation` | hand-made mutants of the defences, run manually, to show the suite bites (`docs/attack-catalogue.md`) | no (manual) |
+| `security` / `codeql` | CodeQL security-extended; results **uploaded to code scanning** and kept as an artifact; any finding fails the job | yes |
+| `security` / `osv`, `workflows` | OSV-Scanner on the lockfile; actionlint and zizmor | yes |
+| `security` / `images` | builds api, web, keycloak, caddy, clamd; Trivy (HIGH/CRITICAL, fix available, `.trivyignore.yaml`) on those five and on the compose-pinned Keycloak and Postgres images; one CycloneDX SBOM per built image as the artifact `sbom-images` | yes |
+| `dependency-review` | `actions/dependency-review-action` on pull requests, fails on HIGH or worse | no; **red until the owner enables the repository's Dependency graph setting** |
+| `scorecard` | OpenSSF Scorecard on `main` and weekly, published and uploaded to code scanning; has run successfully (v2.4.4 was chosen because v2.5.0 was under a week old, release-age policy) | no (not meaningful as a pull-request gate) |
 
-Every action is pinned by commit SHA (checked with `gh api`; the dependency-review and scorecard SHAs are those of tags v5.0.0 and v2.4.4, **not yet exercised in a run until this PR's CI**). `permissions:` are minimal per job; actionlint and zizmor stay green.
+The `protect-main` ruleset requires nine checks: `check`, `identity`, `secret-scan`, `codeql`, `osv`, `images`, `workflows`, `prod-like`, `attack-tests`. The repository is public. Every action is pinned by commit SHA; `permissions:` are minimal per job; actionlint and zizmor stay green.
 
 **Trivy exceptions** live in `.trivyignore.yaml`, each with a statement and an `expired_at` at most 90 days ahead; `scripts/check-trivyignore.mjs` (in `pnpm lint`) fails on a missing reason, a past expiry or a far one. The file is empty today. The existing `skip-files: usr/local/bin/gosu` for the Postgres image (`docs/supply-chain.md`) is the one standing exception and is not in the ignore file because it is a path, not an advisory.
 
-**Playwright smoke: skipped.** The pages are unstyled on purpose until stage 10; every flow (login with a real Keycloak, forms, CSRF, uploads, downloads, headers) is already exercised over HTTP against the production build, in CI, in the `identity` job and in `prod-like`. A browser would add one thing: real CSP and `__Host-` cookie enforcement, which is worth having once there is a UI to break. The browser download and a cold start would also not fit the 3 minute budget with the Docker stack up. Revisit in stage 10.
+**Browser tests.** A real browser was skipped until a user interface existed. Stage 10 added it: the `e2e-browser` job (`docs/ui.md`, ADR-25) checks CSP enforcement, `__Host-` cookie behaviour, framing, storage and accessibility in Chromium, and found that `Referrer-Policy: no-referrer` made every form post fail.
 
 **Not verified here:** a certificate from a public CA, HTTP/3, the behaviour behind a cloud load balancer that adds its own `X-Forwarded-For` (the proxy would need `trusted_proxies` and the BFF contract reviewed), more than one replica (limits are per process), Keycloak or Postgres tuning, backups, log shipping, host hardening, time synchronisation, clamd signature freshness, and the realm secrets of a real deployment. The size of the web image is a property of Next.js's production dependencies, not a finding.

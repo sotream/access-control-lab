@@ -13,59 +13,43 @@ Case file vault. Users upload and read case files. Each file has a classificatio
 
 ## Stages
 
-1. **Foundation**: pnpm monorepo, docker compose (Postgres, Keycloak with an imported dev realm), CI (lint, typecheck, test, audit, secret scan), `docs/threat-model.md` (STRIDE) written before code.
-2. **Identity**: Keycloak realm as code, users and attributes via protocol mappers, MFA (TOTP, Time-based One-Time Password) for high clearance, client for web (confidential, PKCE), client for API.
-3. **API as resource server**: NestJS validates JWT (JSON Web Token) against JWKS (JSON Web Key Set): signature, `iss`, `aud`, `exp`, `nbf`, algorithm allow-list; clock skew; key rotation; no trust of unsigned claims.
-4. **Authorization**: policy module in `packages/policy` (pure functions, table-driven tests), guard and decorators in NestJS, default deny, decision log with reason.
-5. **Data layer defence in depth**: Postgres Row-Level Security keyed on session attributes, so a missed check in code still cannot leak rows; parameterised queries only; migrations tested.
-6. **Web as BFF** (Backend For Frontend): Next.js holds tokens server-side, browser gets only an httpOnly, Secure, SameSite session cookie; CSRF (Cross-Site Request Forgery) protection, refresh rotation, logout with Keycloak end-session, CSP (Content Security Policy) and security headers.
-7. **Audit and integrity**: append-only audit log with hash chain, verification command, auditor-only read; export.
-8. **Hardening**: rate limiting, upload validation (type, size, malware scan hook), secret handling, dependency and image scanning, SBOM (software bill of materials), OWASP ASVS (Application Security Verification Standard) level 2 checklist mapped to tests.
-9. **Attack tests**: scripted abuse cases (token tampering, `alg=none`, wrong audience, expired token, IDOR (insecure direct object reference), privilege escalation, replayed refresh token) run in CI.
-10. **Frontend design** (last): Tailwind design pass on a working, secure UI. **Not started: frontend design, to be discussed with the owner first.**
+All ten stages are done. Each was one branch, one pull request squash-merged into `main`, and ended with tests that try to break the new control.
+
+| # | Stage | What it delivered | Where to read more |
+|---|-------|-------------------|--------------------|
+| 1 | Foundation | pnpm monorepo, docker compose (Postgres, Keycloak with an imported dev realm), CI (lint, typecheck, test, audit, secret scan), the STRIDE threat model written before code | `docs/threat-model.md` |
+| 2 | Identity | Keycloak realm as code, users and attributes via protocol mappers, TOTP (time-based one-time password) for high clearance, a confidential web client with PKCE, an API client | `docs/identity.md` |
+| 3 | API as resource server | NestJS validates the JWT (JSON Web Token) against the JWKS (JSON Web Key Set): signature, `iss`, `aud`, `exp`, `nbf`, algorithm allow-list, clock skew, key rotation, no trust of unsigned claims | `docs/api-auth.md` |
+| 4 | Authorization | `packages/policy` (pure functions, table-driven tests, coverage gate), `@Policy` guard, decision log with reasons, the 404-versus-403 rule | `docs/policy.md`, ADR-9 |
+| 5 | Data layer defence in depth | Postgres row-level security keyed on session attributes, guard trigger, migrator and app roles, decide-and-write in one transaction, parity tests against the policy package | `docs/data-layer.md`, ADR-10 to 12 |
+| 6 | Web as BFF (backend for frontend) | Next.js holds tokens server-side; the browser gets only an httpOnly, Secure, SameSite session cookie; CSRF scheme, refresh rotation, logout with Keycloak end-session, CSP and security headers | `docs/bff.md`, ADR-13 to 16 |
+| 7 | Audit and integrity | HMAC-chained, append-only audit log (decisions, break-glass, authentication events, auditor reads and exports), database-enforced linearity, checkpoints, verification command, auditor-only read and export | `docs/audit.md`, ADR-17 to 19 |
+| 8 | Hardening | rate limiting, signed network zone, production profile, secret handling, attachments (content inspection, quarantine, scanner hook), hardened images, the prod-like stack, image scanning, SBOM, ASVS self-assessment | `docs/hardening.md`, `docs/deployment.md`, `docs/asvs.md`, ADR-20 to 23 |
+| 9 | Attack tests | a black-box attack suite against the prod-like stack, fuzzing, ZAP baseline, threat-coverage gate in `pnpm lint`, accepted risks in one place, mutation spot-check of the suite | `docs/attack-catalogue.md`, `docs/accepted-risks.md`, ADR-24 |
+| 10 | Frontend design | the design system and every page of the console, self-hosted fonts, a build-time stylesheet under the unchanged strict CSP, a real-browser test stage (Playwright, axe, CSP violation collector, cookie and storage checks, keyboard order, generated screenshots) | `docs/ui.md`, ADR-25 |
+
+Defects found late are recorded where they were found: stage 9 attacks found five (`docs/attack-catalogue.md`); the first real-browser run in stage 10 found that `Referrer-Policy: no-referrer` made Chromium send `Origin: null` on same-origin form posts, so every form was refused (ADR-25); a flaky test found that the zone MAC accepted four spellings of the same bytes (`docs/hardening.md`).
 
 ## Definition of done per stage
 
 Tests pass, negative tests exist for the new control, docs updated, threat model entries linked to the tests that cover them.
 
-## Security additions and owning stage
+## Security additions after the stage 1 review
 
-Added after stage 1 review ("maximum security, honest and verified"). Each item has one owning stage.
+Added after the stage 1 review, each with one owning stage.
 
 | Addition | Stage | Status |
 |----------|-------|--------|
-| CI: CodeQL, OSV-Scanner, Trivy image scan, SBOM artifact, actionlint, zizmor, identity job | 2 | done in stage 2 PR |
+| CI: CodeQL, OSV-Scanner, Trivy image scan, SBOM artifact, actionlint, zizmor, identity job | 2 | done |
 | Supply chain: install scripts off, minimum release age, image digests, Dependabot cooldown | 2 | done |
 | Repo hygiene: SECURITY.md, CODEOWNERS, PR checklist, editorconfig, signed-commit guidance | 2 | done |
-| Dependabot auto-merge (minor/patch) | 2 | file present, inert until owner sets main ruleset and `DEPENDABOT_AUTOMERGE=true` |
-| OpenSSF Scorecard | 8 | not enabled: needs repo-read token on a private repo, revisit if repo goes public |
-| dependency-review-action | 8 | needs Advanced Security on private repos; OSV and audit cover lockfile; enable if repo goes public |
-| Image SBOM and image scan in a release build | 8 | |
-| helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3 (API: done), 6 (BFF CSP and headers), 8 (distributed rate limiting) | API part done in stage 3 |
-| Realm: TLS (`sslRequired=all`), production hostname | 8 | dev exception documented |
+| Dependabot auto-merge (minor/patch) | 2 | active: the `protect-main` ruleset requires checks and the variable `DEPENDABOT_AUTOMERGE` is `true` |
+| OpenSSF Scorecard | 8 | done: the repository is public; the workflow runs on `main` and weekly |
+| dependency-review-action | 8 | workflow present; red until the owner enables the repository's Dependency graph setting (not a code problem) |
+| Image SBOM and image scan | 8 | done (`images` job) |
+| helmet/CSP/headers, strict CORS, rate limiting, DTO whitelist with `forbidNonWhitelisted`, headers tested | 3, 6, 8 | done (API in stage 3, BFF in stage 6, distributed limiting stage 8) |
+| Realm: TLS (`sslRequired=all`), production hostname | 8 | done in the prod-like stack; the dev realm keeps its documented exception |
 
-Stage 4 delivered: `packages/policy` (pure evaluator, 100% coverage gate), `@Policy` enforcement in the API guard, decision log, 404/403 rule (docs/policy.md, ADR-9).
-Carried forward: stage 5 must pass the same read decision to SQL/RLS (`readFilter` parity) and decide-and-write in one transaction; stage 6 must design how the
-BFF conveys the client's network zone (today `MANAGED_ADDRESSES` on the socket address); stage 7 persists the `audit` obligation.
+## Notes handed from stage to stage
 
-Stage 5 delivered: Postgres schema with forced RLS and a guard trigger, migrator/app roles, decide-and-write in one transaction, parity tests against `packages/policy`
-(docs/data-layer.md, ADR-10..12). Carried forward: stage 6 must decide how the BFF conveys the client network zone; stage 7 persists the `audit` obligation and break-glass
-justification (append-only table, hash chain); stage 8 adds attachments/file storage threats (T-28..T-31), distributed rate limiting and TLS between components.
-
-Stage 6 delivered: Next.js BFF with server-side OIDC (openid-client), encrypted Postgres sessions, CSRF scheme, allow-listed API client, strict CSP, functional pages (docs/bff.md, ADR-13..16).
-Carried forward: stage 7 persists the `audit` obligation and break-glass justification and should log BFF login/logout/refresh-failure events; stage 8 adds login-route rate limiting, TLS between components, key-ring rotation procedure,
-and a decision on conveying the client network zone; stage 10 designs the UI (the pages here are intentionally unstyled).
-
-Stage 7 delivered: HMAC-chained append-only audit log (decisions, break-glass, BFF authentication events, auditor reads/exports), database-enforced linearity, checkpoints, `audit:verify` and `audit:checkpoint`, auditor endpoints and page (docs/audit.md, ADR-17..19).
-Carried forward to stage 8: key management for `AUDIT_HMAC_KEYS`, `SESSION_ENCRYPTION_KEYS` and the DB passwords (secret store, rotation procedure), external anchoring of checkpoints (WORM or second system), retention/partitioning of the audit table, audit-write throughput measurement, rate limiting of login and the auditor endpoints, TLS between components.
-
-Stage 8a delivered (PR "hardening, part 1"): `@acl/netguard` (rate limiter, trusted-proxy contract, signed network zone), per-user and per-address limits at the BFF and per-subject limits at the API, production profile (`ACL_ENV`) with secret checks and `*_FILE` secrets, rotation procedures, attachments (content inspection, quarantine, scanner hook, RLS following the parent, audit rows) with mutation results (docs/hardening.md, ADR-20 and ADR-21).
-Stage 8b (next PR): Dockerfiles, prod-like compose with a TLS proxy, image scanning, CI additions (dependency-review, CodeQL upload, Scorecard), `docs/asvs.md`.
-
-Stage 8b delivered: hardened images (api, web, keycloak, caddy, clamd), the prod-like stack with a TLS proxy and its attack test, Trivy on the built images, dependency-review, Scorecard, ASVS mapping (`docs/deployment.md`, `docs/asvs.md`, ADR-22/23).
-
-Stage 9 delivered: a black-box attack suite (`tests/attack`, 60 catalogued attacks, fuzzing, ZAP baseline) against the prod-like stack through its proxy, run in CI; a threat-coverage gate in `pnpm lint`; one place for accepted risks; mutation spot-check of the suite (`docs/attack-catalogue.md`, `docs/accepted-risks.md`, ADR-24). Five defects it found were fixed in the same PR.
-
-Stage 10 delivered: the design system and every page of the console (docs/ui.md: tokens, themes, components, role navigation, classification banners, break-glass frame, step-up screen, audit pages with chain proof, generic error pages), self-hosted fonts, a build-time stylesheet under the unchanged strict CSP, and a real-browser test stage (`tests/e2e`: Playwright, axe, CSP violation collector, cookie and storage checks, keyboard order, role smoke paths, generated screenshots). The first real-browser run found that `Referrer-Policy: no-referrer` made Chromium send `Origin: null` on form posts, so every form was refused (ADR-25).
-
-**Status: stages 1 to 10 are done.**
+Until stage 8 the network zone was taken from a configured address list (`MANAGED_ADDRESSES`) on the socket address; stage 8 replaced it with `MANAGED_CIDRS` and a zone header signed by the BFF (ADR-20).
