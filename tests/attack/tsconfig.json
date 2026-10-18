@@ -1,5 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": true, "module": "esnext", "moduleResolution": "bundler" },
-  "include": ["src", "vitest.config.ts"]
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "es2024",
+      "dom"
+    ]
+  },
+  "include": [
+    "src",
+    "vitest.config.ts"
+  ]
 }

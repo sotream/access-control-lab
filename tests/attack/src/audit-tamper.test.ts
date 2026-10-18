@@ -94,6 +94,19 @@ describe("A-51 through the application there is no way to change or hide the tra
   });
 });
 
+describe("A-53 the databases of the application and of the identity provider are walled off from each other", () => {
+  it("the identity provider's role cannot enter the application database, and the application roles cannot enter the identity provider's", () => {
+    const kc = env.KEYCLOAK_DB_PASSWORD ?? "";
+    expect(psqlAs("keycloak", kc, "SELECT 1", "acl").ok, "keycloak role into acl").toBe(false);
+    expect(psqlAs("keycloak", kc, "SELECT count(*) FROM case_files", "acl").ok).toBe(false);
+    for (const [user, pw] of [["casefile_app", appPw()], ["casefile_web", webPw()], ["casefile_audit", auditPw()]] as const) {
+      expect(psqlAs(user, pw, "SELECT 1", "keycloak").ok, `${user} into the keycloak database`).toBe(false);
+    }
+    expect(psqlAs("keycloak", kc, "SELECT 1", "keycloak").ok, "the identity provider's own role works (the check is not vacuous)").toBe(true);
+    expect(psqlAs("casefile_app", appPw(), "SELECT 1", "acl").ok, "and so does the application's").toBe(true);
+  });
+});
+
 describe("A-52 after all of the above the chain still verifies", () => {
   it("the verifier CLI, run with the audit role and the key ring, finds no gap, fork, wrong key or altered row", () => {
     const keys = secret("audit_hmac_keys");

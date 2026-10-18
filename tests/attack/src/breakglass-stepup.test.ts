@@ -16,18 +16,18 @@ describe("A-60 break-glass: who may use it, for what, and what it leaves behind"
     const s = await session("unit-admin-alpha");
     expect((await bff(s, "GET", `/case-files/${f.confAlphaA}`)).status, "without break-glass").toBe(404);
     const before = auditRows(f.confAlphaA);
-    const r = await breakGlass(s, f.confAlphaA, `incident 4711\u0007‮ <b>x</b>\r\nforged: line`);
+    const r = await breakGlass(s, f.confAlphaA, `incident 4711\u0007\u202e <b>x</b>\r\nforged: line`);
     expect([200, 303]).toContain(r.status);
     expect(auditRows(f.confAlphaA)).toBeGreaterThan(before);
     const stored = psql(`SELECT details->>'justification' FROM audit_log WHERE resource_id = ${q(f.confAlphaA)} AND details ? 'justification' ORDER BY id DESC LIMIT 1`);
-    expect(stored).not.toMatch(/[\u0000-\u001f\u007f‮]/u);
+    expect(stored).not.toMatch(/[\u0000-\u001f\u007f\u202e]/u);
     expect(stored).toContain("incident 4711");
   });
   it("empty, blank, control-only and huge justifications are refused or cut, never accepted as they are", async () => {
     const f = fixtures();
     const s = await session("unit-admin-alpha");
     const before = auditRows(f.confAlphaA);
-    for (const j of ["", "   ", "\t\n", "\u0007\u0008", "‮​"]) {
+    for (const j of ["", "   ", "\t\n", "\u0007\u0008", "\u202e\u200b"]) {
       const r = await breakGlass(s, f.confAlphaA, j);
       expect(r.text, `justification ${JSON.stringify(j)}`).not.toContain("fixture body");
       expect(auditRows(f.confAlphaA), `allow row for ${JSON.stringify(j)}`).toBe(before);

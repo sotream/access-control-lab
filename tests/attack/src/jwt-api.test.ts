@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { api, FORM, form, idp } from "./http.js";
 import { CALLBACK, claimsOf, keycloakLogin, oidcTokens, pkce, tokenRequest, type Tokens } from "./kc.js";
 import { b64, hs256, parts, rs256, unsigned, withHeader, withPayload } from "./jwt.js";
-import { COMPOSE, ROOT, env } from "./stack.js";
+import { ROOT, env } from "./stack.js";
 import { Jar } from "./http.js";
 import { randomBytes } from "node:crypto";
 

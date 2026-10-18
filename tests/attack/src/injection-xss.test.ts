@@ -5,7 +5,7 @@ import { bff, session } from "./sessions.js";
 import { psql } from "./stack.js";
 
 const SQLI = ["'; DROP TABLE case_files; --", "' OR '1'='1", '" OR 1=1 --', "1; SELECT pg_sleep(5)", "\\'; DELETE FROM role_grants; --", "$$; DROP SCHEMA public CASCADE; --", "'||(SELECT version())||'", "x' UNION SELECT NULL,NULL,NULL--", "%27%20OR%201=1", "Robert'); DROP TABLE audit_log;--", "ʼ OR 1=1 --", "'; INSERT INTO role_grants VALUES ('analyst','approve',true,false,false); --"];
-const XSS = ['<script>alert(1)</script>', '"><img src=x onerror=alert(1)>', "'><svg onload=alert(1)>", "javascript:alert(1)", "<a href=javascript:alert(1)>x</a>", "</title><script>alert(1)</script>", "<iframe srcdoc='<script>alert(1)</script>'>", "${alert(1)}", "{{constructor.constructor('alert(1)')()}}", "<style>@import 'https://evil.example/x.css'</style>", "<math><mtext><script>alert(1)</script>", "‮<b>rtl</b>", "<details open ontoggle=alert(1)>"];
+const XSS = ['<script>alert(1)</script>', '"><img src=x onerror=alert(1)>', "'><svg onload=alert(1)>", "javascript:alert(1)", "<a href=javascript:alert(1)>x</a>", "</title><script>alert(1)</script>", "<iframe srcdoc='<script>alert(1)</script>'>", "${alert(1)}", "{{constructor.constructor('alert(1)')()}}", "<style>@import 'https://evil.example/x.css'</style>", "<math><mtext><script>alert(1)</script>", "\u202e<b>rtl</b>", "<details open ontoggle=alert(1)>"];
 
 /** names of attributes that are event handlers, found by tokenising real tags (quoted values may contain anything: that is text, not an attribute) */
 function eventHandlerAttributes(html: string): string[] {
@@ -150,5 +150,38 @@ describe("A-33 response splitting and header injection", () => {
     // a control character in a name header sent to an upload is refused before it reaches any header
     const up = await vault(`/actions/case-files/00000000-0000-4000-8000-000000000000/attachments`, { method: "POST", jar: s.jar, headers: { ...FORM, origin: "https://vault.localhost" }, body: form({ csrf: s.csrf }) });
     expect(up.status).toBeLessThan(500);
+  });
+});
+
+describe("A-34 stored XSS through the other places text ends up: a file name, a break-glass justification, and the auditor's pages", () => {
+  it("a script in a file name or in a justification is neutralised before storage and inert where the auditor reads it", async () => {
+    const owner = await session("analyst-official");
+    const id = ((await bff(owner, "POST", "/case-files", { title: "attack: xss names", classification: "OFFICIAL", compartments: [] })).json as { id: string }).id;
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGNgYGD4z8DAwMAAAAQkAQB5lJq4AAAAAElFTkSuQmCC", "base64");
+    for (const name of ["<script>alert(1)</script>.png", '"><img src=x onerror=alert(1)>.png', "javascript:alert(1).png", "'><svg onload=alert(1)>.png"]) {
+      const body = Buffer.concat([Buffer.from(`--b\r\ncontent-disposition: form-data; name="csrf"\r\n\r\n${owner.csrf}\r\n--b\r\ncontent-disposition: form-data; name="file"; filename="${name.replace(/"/g, "'")}"\r\ncontent-type: image/png\r\n\r\n`), png, Buffer.from("\r\n--b--\r\n")]);
+      await vault(`/actions/case-files/${id}/attachments`, { method: "POST", jar: owner.jar, headers: { origin: "https://vault.localhost", "sec-fetch-site": "same-origin", "content-type": "multipart/form-data; boundary=b" }, body });
+    }
+    const page = await vault(`/cases/${id}`, { jar: owner.jar });
+    expect(page.status).toBe(200);
+    expect(page.text).not.toMatch(/<script>alert\(1\)<\/script>|<img src=x onerror|<svg onload|href=["']?javascript:/i);
+    expect(eventHandlerAttributes(page.text)).toEqual([]);
+    const names = ((await bff(owner, "GET", `/case-files/${id}/attachments`)).json as { name: string }[]).map((x) => x.name);
+    for (const n of names) expect(n, "a stored name has no markup characters").not.toMatch(/[<>"'`:\\/]/);
+
+    const admin = await session("unit-admin-alpha");
+    const conf = (await import("./fixtures.js")).fixtures().confAlphaA;
+    for (const j of ["<script>alert(1)</script>", '"><img src=x onerror=alert(1)>', "</td><script>alert(1)</script>"]) await vault(`/actions/case-files/${conf}/break-glass`, { method: "POST", jar: admin.jar, headers: { ...FORM, origin: "https://vault.localhost", "sec-fetch-site": "same-origin" }, body: form({ csrf: admin.csrf, justification: j }) });
+    const auditor = await session("auditor");
+    for (const path of ["/audit", "/audit?effect=allow", `/audit?resource=${conf}`]) {
+      const r = await vault(path, { jar: auditor.jar });
+      expect(r.status, path).toBe(200);
+      expect(r.text, path).not.toMatch(/<script>alert\(1\)<\/script>|<img src=x onerror|<svg onload/i);
+      expect(eventHandlerAttributes(r.text), path).toEqual([]);
+    }
+    const rows = (await bff(auditor, "GET", `/audit-log?resource=${conf}&limit=50`)).text;
+    expect(rows, "the justification is stored with the markup defanged or as inert text, never as executable markup").not.toMatch(/\u0000/);
+    const csv = await vault("/actions/audit/export", { method: "POST", jar: auditor.jar, headers: { ...FORM, origin: "https://vault.localhost", "sec-fetch-site": "same-origin" }, body: form({ csrf: auditor.csrf, format: "csv" }) });
+    for (const line of csv.text.split("\n").slice(1)) for (const cell of line.split(",")) expect(cell).not.toMatch(/^["']?[=+\-@]/);
   });
 });

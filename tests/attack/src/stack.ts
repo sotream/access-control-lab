@@ -29,8 +29,8 @@ export function psql(sqlText: string): string {
 }
 
 /** psql as another database role (a stolen credential): returns the outcome instead of throwing */
-export function psqlAs(user: string, password: string, sqlText: string): { ok: boolean; out: string } {
-  const r = spawnSync("docker", [...COMPOSE, "exec", "-T", "-e", `PGPASSWORD=${password}`, "postgres", "psql", "-h", "127.0.0.1", "-U", user, "-d", "acl", "-At", "-c", sqlText], { cwd: ROOT, encoding: "utf8" });
+export function psqlAs(user: string, password: string, sqlText: string, db = "acl"): { ok: boolean; out: string } {
+  const r = spawnSync("docker", [...COMPOSE, "exec", "-T", "-e", `PGPASSWORD=${password}`, "postgres", "psql", "-h", "127.0.0.1", "-U", user, "-d", db, "-At", "-c", sqlText], { cwd: ROOT, encoding: "utf8" });
   return { ok: r.status === 0, out: `${r.stdout}${r.stderr}`.trim() };
 }
 
