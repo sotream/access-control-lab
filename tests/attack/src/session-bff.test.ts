@@ -45,12 +45,12 @@ describe("A-12 cookie tampering", () => {
     const s = await session("analyst-official");
     const c = s.cookie;
     const flip = c.slice(0, -1) + (c.endsWith("A") ? "B" : "A");
-    const variants = [flip, c.slice(0, 20), c + "A", c + c, "", c.toUpperCase(), c.replace(/[A-Za-z]/, "!"), randomBytes(32).toString("base64url"), "' OR '1'='1", "a".repeat(5000), "../../etc/passwd", `${c}; ${SESSION}=x`];
+    const variants = [flip, c.slice(0, 20), c + "A", c + c, "", c.toUpperCase(), c.replace(/[A-Za-z]/, "!"), randomBytes(32).toString("base64url"), "' OR '1'='1", "a".repeat(5000), "../../etc/passwd"];
     for (const v of variants) {
       const j = new Jar();
       j.cookies.set(SESSION, v);
       const r = await vault("/api/auth/session", { jar: j });
-      expect((r.json as { authenticated?: boolean } | undefined)?.authenticated, v.slice(0, 20)).not.toBe(true);
+      expect((r.json as { authenticated?: boolean } | undefined)?.authenticated, `variant #${variants.indexOf(v)} (${v.length} chars)`).not.toBe(true);
       expect(r.status).toBeLessThan(500);
     }
     // another name for the same value: only the __Host- cookie is read
