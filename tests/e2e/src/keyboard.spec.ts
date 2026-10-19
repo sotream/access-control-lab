@@ -42,15 +42,15 @@ test("focus is visible: every stop has an outline", async ({ as }) => {
   }
 });
 
-test("create form: the order is brand, user bar controls, navigation, then the fields top to bottom, and Enter in the title field submits", async ({ as }) => {
+test("create form: the order is skip link, brand, navigation, theme and sign-out, then the fields top to bottom, and Enter in the title field submits", async ({ as }) => {
   const page = await as("analyst-official");
   await page.goto("/cases/new");
-  const order = await focusPath(page, 24);
+  const order = await focusPath(page, 26);
   const at = (s: string) => order.findIndex((x) => x.includes(s));
   expect(at("Skip to main content")).toBe(0);
-  expect(at("Casefile Vault")).toBeLessThan(at("Sign out"));
-  expect(at("Sign out")).toBeLessThan(at("My cases"));
-  expect(at("My cases")).toBeLessThan(at("input:title"));
+  expect(at("Casefile Vault")).toBeLessThan(at("My cases"));
+  expect(at("My cases")).toBeLessThan(at("Sign out"));
+  expect(at("Sign out")).toBeLessThan(at("input:title"));
   expect(at("input:title")).toBeLessThan(at("textarea:body"));
   expect(at("textarea:body")).toBeLessThan(at("select:classification"));
   expect(at("select:classification")).toBeLessThan(at("input:compartments"));

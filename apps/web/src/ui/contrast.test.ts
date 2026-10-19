@@ -19,27 +19,28 @@ export const ratio = (a: string, b: string) => {
   return (x! + 0.05) / (y! + 0.05);
 };
 
+// dark is the default (also without a preference); light is chosen explicitly or by prefers-color-scheme: light
 const themes = {
-  light: block(':root[data-theme="light"]'),
   dark: block(':root[data-theme="dark"]'),
-  "dark (system)": block(':root:not([data-theme="light"])'),
+  light: block(':root[data-theme="light"]'),
+  "light (system)": block(':root:not([data-theme="dark"])'),
 };
 
 // [foreground, background, minimum]: 4.5 for text, 3 for focus rings and the borders of form controls (WCAG 1.4.3, 1.4.11)
 const TEXT: [string, string][] = [
-  ["text", "bg"], ["text", "surface"], ["text", "surface-2"], ["muted", "bg"], ["muted", "surface"], ["muted", "surface-2"],
+  ["text", "bg"], ["text", "surface"], ["text", "surface-2"], ["text", "surface-3"], ["text", "field"], ["muted", "field"], ["muted", "surface-3"], ["link", "field"], ["accent-bright", "surface"], ["muted", "bg"], ["muted", "surface"], ["muted", "surface-2"],
   ["link", "bg"], ["link", "surface"], ["link", "surface-2"], ["accent-text", "accent"],
   ["danger", "danger-bg"], ["warn", "warn-bg"], ["ok", "ok-bg"], ["info", "info-bg"],
   ["cls-official", "cls-official-bg"], ["cls-confidential", "cls-confidential-bg"], ["cls-secret", "cls-secret-bg"],
   ["bar-text", "bar-official"], ["bar-text", "bar-confidential"], ["bar-text", "bar-secret"],
   ["danger", "surface"], ["text", "danger-bg"],
 ];
-const NON_TEXT: [string, string][] = [["focus", "bg"], ["focus", "surface"], ["line-strong", "surface"], ["line-strong", "bg"], ["danger", "surface"]];
+const NON_TEXT: [string, string][] = [["accent-bright", "surface"], ["line-strong", "field"], ["line-strong", "surface-2"], ["focus", "surface-3"], ["focus", "field"], ["focus", "bg"], ["focus", "surface"], ["line-strong", "surface"], ["line-strong", "bg"], ["danger", "surface"]];
 
 describe("design tokens meet WCAG 2.2 AA in every theme", () => {
-  it("the two dark blocks (explicit and system) are identical", () => {
-    const { ["dark (system)"]: sys, dark } = themes;
-    expect(sys).toEqual(dark);
+  it("the two light blocks (explicit and system) are identical", () => {
+    const { ["light (system)"]: sys, light } = themes;
+    expect(sys).toEqual(light);
   });
   for (const [name, tok] of Object.entries(themes)) {
     it.each(TEXT)(`${name}: %s on %s is at least 4.5:1`, (fg, bg) => expect(ratio(tok[fg]!, tok[bg]!)).toBeGreaterThanOrEqual(4.5));
