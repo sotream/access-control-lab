@@ -1,5 +1,5 @@
 // Generates docs/screenshots/*.png (light and dark) from the running prod-like stack. Seed users and fixed demo text only; no real data.
-// Run: pnpm --filter @acl/e2e-tests screenshots   (the files are generated, never edited by hand)
+// Run: pnpm screenshots   (starts a fresh prod-like stack, renders, tears it down; the files are generated, never edited by hand)
 import { expect, test } from "./helpers";
 import type { Page } from "@playwright/test";
 
@@ -7,7 +7,6 @@ test.skip(process.env.SHOTS !== "1", "set SHOTS=1 (pnpm screenshots)");
 test.describe.configure({ mode: "serial" });
 
 const OUT = new URL("../../../docs/screenshots/", import.meta.url).pathname;
-const tag = Date.now().toString(36);
 const ids: Record<string, string> = {};
 
 async function create(page: Page, key: string, title: string, body: string, level: string, compartments = "") {
@@ -31,16 +30,33 @@ async function shoot(page: Page, name: string, path: string, opts: { full?: bool
   }
 }
 
-test("fixtures", async ({ as }) => {
+test("fixtures (a fresh stack only: the images must show demo data and nothing else)", async ({ as }) => {
   const analyst = await as("analyst-official");
-  await create(analyst, "official", `Standortwechsel Rechenzentrum ${tag}`, "Lagebericht\n\nDer Betrieb wird von Standort A nach Standort B verlegt.\nÜbergabe: 06:00 UTC, Rückfall: bis 12:00 UTC.\nVerantwortlich: Einheit alpha.", "OFFICIAL");
+  await analyst.goto("/cases");
+  await expect(analyst.getByText("Nothing you may see."), "the stack is not fresh: run pnpm screenshots, which starts one").toBeVisible();
+
+  await create(analyst, "official", "Standortwechsel Rechenzentrum", "Lagebericht\n\nDer Betrieb wird von Standort A nach Standort B verlegt.\nÜbergabe: 06:00 UTC, Rückfall: bis 12:00 UTC.\nVerantwortlich: Einheit alpha.", "OFFICIAL");
   await analyst.getByLabel("Add a file").setInputFiles({ name: "uebergabe-protokoll.txt", mimeType: "text/plain", buffer: Buffer.from("Übergabeprotokoll\n1. Zugänge geprüft\n2. Sicherung bestätigt\n") });
   await analyst.getByRole("button", { name: "Upload" }).click();
   await expect(analyst.getByRole("status").filter({ hasText: "Attachment stored." })).toBeVisible();
   await analyst.getByRole("button", { name: "Submit for review" }).click();
-  await create(analyst, "draft", `Entwurf Lieferkette ${tag}`, "Offene Punkte zur Lieferkette.", "OFFICIAL");
+  await create(analyst, "draft", "Entwurf Lieferkette", "Offene Punkte zur Lieferkette.", "OFFICIAL");
+  await create(analyst, "maintenance", "Wartungsfenster Netzwerk Nord", "Geplante Wartung der Kernrouter, Fenster Samstag 02:00 bis 05:00 UTC.", "OFFICIAL");
+  await analyst.getByRole("button", { name: "Submit for review" }).click();
+  await create(analyst, "spare", "Beschaffung Ersatzteile Q4", "Bedarf an Ersatzteilen für das vierte Quartal, Abstimmung mit der Logistik.", "OFFICIAL");
+  await create(analyst, "report", "Lagebericht Woche 42", "Zusammenfassung der Woche: keine Störungen im Regelbetrieb.", "OFFICIAL");
+  await analyst.getByRole("button", { name: "Submit for review" }).click();
+
+  const reviewer = await as("reviewer");
+  await reviewer.goto("/review?q=Lagebericht");
+  await reviewer.getByRole("link", { name: "Lagebericht Woche 42" }).click();
+  await reviewer.getByRole("button", { name: "Approve" }).click();
+  await expect(reviewer.locator(".stepper [aria-current='step']")).toHaveText(/Approved/);
+
   const secret = await as("analyst-secret-a");
-  await create(secret, "secret", `Quellenlage Nord ${tag}`, "Auszug, nur für berechtigte Personen.", "SECRET", "A");
+  await create(secret, "secret", "Quellenlage Nord", "Auszug, nur für berechtigte Personen.", "SECRET", "A");
+  const admin = await as("unit-admin-alpha");
+  await create(admin, "confidential", "Einsatzplanung Standort B", "Planung der Kräfte für den Einsatz an Standort B.", "CONFIDENTIAL");
 });
 
 test("analyst pages", async ({ as }) => {
