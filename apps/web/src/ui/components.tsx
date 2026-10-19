@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon, type IconName } from "./icons";
 import { t } from "./i18n";
 
 export const LEVELS = ["OFFICIAL", "CONFIDENTIAL", "SECRET"] as const;
@@ -56,7 +57,8 @@ export function ScanChip({ status }: { status: string }) {
 /** role="alert" is announced at once; role="status" politely. Both carry a word, not only a colour. */
 export function Alert({ tone, children, live = "status" }: { tone: "info" | "ok" | "warn" | "danger"; children: ReactNode; live?: "alert" | "status" }) {
   const word = tone === "danger" ? t.msg.problem : tone === "ok" ? t.msg.ok : t.msg.notice;
-  return <div className="alert" data-tone={tone} role={live}><strong>{word}:</strong>{children}</div>;
+  const icon: IconName = tone === "ok" ? "check" : tone === "info" ? "info" : "alert";
+  return <div className="alert" data-tone={tone} role={live}><Icon name={icon} /><div><strong>{word}:</strong>{children}</div></div>;
 }
 
 export function Panel({ title, id, children }: { title: string; id: string; children: ReactNode }) {
@@ -96,3 +98,13 @@ export function Page({ title, actions, children }: { title: string; actions?: Re
 
 export const shortId = (s: string): string => s.slice(0, 8);
 export const utc = (iso: string | Date): string => new Date(iso).toISOString().slice(0, 19).replace("T", " ") + " UTC";
+
+/** A table inside a scroll container: the container takes focus so the keyboard can scroll it, and it has a name. */
+export function TableWrap({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="table-wrap" role="region" aria-label={label} tabIndex={0}>{children}</div>;
+}
+
+/** Empty state: an icon and the sentence that says what is missing (and, where one exists, the way forward). */
+export function Empty({ icon, children, live }: { icon: IconName; children: ReactNode; live?: boolean }) {
+  return <div className="empty" {...(live ? { role: "status" } : {})}><Icon name={icon} /><p>{children}</p></div>;
+}

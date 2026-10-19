@@ -1,5 +1,6 @@
 import { apiFetch, parse, requireSession } from "../../src/server/pages";
-import { Alert, Field, Mono, Page, Panel, Status, utc } from "../../src/ui/components";
+import { Alert, Empty, Field, Mono, Page, Panel, Status, TableWrap, utc } from "../../src/ui/components";
+import { Icon } from "../../src/ui/icons";
 import { t } from "../../src/ui/i18n";
 
 interface Row {
@@ -45,7 +46,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
             <p className="mb-2 text-sm text-muted">{t.audit.proofLead}</p>
             <p className="mb-2">{latest ? <>{t.audit.lastCheckpoint}: <Mono>#{latest.id}</Mono>, {t.audit.last} <Mono>{latest.last_id}</Mono>, <Mono>{utc(latest.ts)}</Mono></> : t.audit.noCheckpoints}</p>
             <p className="mb-2 text-sm">{t.audit.checkpoints}: <Mono>{checkpoints.length}</Mono></p>
-            <a className="btn" href="/audit/verify">{t.audit.verifyLink}</a>
+            <a className="btn" href="/audit/verify"><Icon name="verify" />{t.audit.verifyLink}</a>
           </Panel>
           <Panel title={t.audit.export} id="p-export">
             <p className="mb-2 text-sm text-muted">{t.audit.exportLead}</p>
@@ -53,7 +54,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
               <input type="hidden" name="csrf" value={session.csrfToken} />
               {KEYS.map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
               <Field id="x-format" label={t.audit.format}><select id="x-format" name="format"><option value="ndjson">NDJSON</option><option value="csv">CSV</option></select></Field>
-              <button type="submit" className="btn" data-kind="primary">{t.audit.exportButton}</button>
+              <button type="submit" className="btn" data-kind="primary"><Icon name="export" />{t.audit.exportButton}</button>
             </form>
           </Panel>
     </>
@@ -75,8 +76,8 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
           {proofPanels}
         </div>
         <div>
-          {page.rows.length === 0 ? <p className="empty" role="status">{t.audit.empty}</p> : (
-            <div className="table-wrap">
+          {page.rows.length === 0 ? <Empty icon="list" live>{t.audit.empty}</Empty> : (
+            <TableWrap label={t.audit.caption}>
               <table className="tbl">
                 <caption>{t.audit.caption}</caption>
                 <thead><tr>{(["id", "time", "actor", "action", "resource", "effect", "reason", "source", "request"] as const).map((c) => <th scope="col" key={c}>{t.audit.columns[c]}</th>)}</tr></thead>
@@ -96,7 +97,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
           )}
           {page.nextCursor ? <nav className="pager" aria-label={t.audit.next}><a href={`/audit?${next}`} rel="next">{t.audit.next}</a></nav> : null}
         </div>

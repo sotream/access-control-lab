@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:e2e": "node ../../scripts/prod-like-setup.mjs && playwright test",
-    "screenshots": "node ../../scripts/prod-like-setup.mjs && SHOTS=1 playwright test src/screenshots.spec.ts"
+    "screenshots": "node ../../scripts/make-screenshots.mjs",
+    "screenshots:render": "SHOTS=1 playwright test src/screenshots.spec.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

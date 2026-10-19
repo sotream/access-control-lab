@@ -1,23 +1,27 @@
 import { currentSession } from "../src/server/session";
-import { Page } from "../src/ui/components";
+import { Icon } from "../src/ui/icons";
 import { t } from "../src/ui/i18n";
 
 export default async function Home() {
   const session = await currentSession();
   return (
-    <Page title={t.landing.title}>
-      <p className="mb-4 max-w-2xl">{t.landing.lead}</p>
+    <section className="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title"><span className="brand-mark"><Icon name="shield" /></span>{t.landing.title}</h1>
+      <p className="lead">{t.landing.lead}</p>
       {session ? (
         <>
-          <p className="mb-3">{t.landing.signedIn}</p>
-          <a className="btn" data-kind="primary" href="/cases">{t.landing.open}</a>
+          <p className="mb-4">{t.landing.signedIn}</p>
+          <a className="btn" data-kind="primary" href="/cases"><Icon name="folder" />{t.landing.open}</a>
         </>
       ) : (
-        <>
-          <a className="btn" data-kind="primary" href="/api/auth/login">{t.landing.signIn}</a>
-          <p className="mt-4 max-w-2xl text-muted">{t.landing.note}</p>
-        </>
+        <a className="btn" data-kind="primary" href="/api/auth/login"><Icon name="lock" />{t.landing.signIn}</a>
       )}
-    </Page>
+      <ul className="points">
+        <li><Icon name="eye" />{t.landing.pointRecorded}</li>
+        <li><Icon name="lock" />{t.landing.pointMfa}</li>
+        <li><Icon name="shield" />{t.landing.pointNeed}</li>
+      </ul>
+      {session ? null : <p className="mt-4 text-sm text-muted">{t.landing.note}</p>}
+    </section>
   );
 }

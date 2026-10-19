@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Badge, Chip, Status, utc } from "./components";
 import { t } from "./i18n";
+import { Icon } from "./icons";
 import { navFor } from "./nav";
 import type { Me } from "../server/pages";
 import type { Theme } from "../server/theme";
@@ -39,25 +40,17 @@ export function TopBar({ me, csrf, expiresAt, theme, path }: Omit<ChromeProps, "
   const mfa = me ? me.acr === "mfa" : false;
   return (
     <header className="topbar">
-      <div className="topbar-main">
-        <a className="brand" href="/">{t.product}</a>
-        <div className="topbar-controls">
-          <ThemeForm theme={theme} csrf={csrf} path={path} />
-          {signedIn ? (
-            <form method="post" action="/api/auth/logout" className="inline-form">
-              <input type="hidden" name="csrf" value={csrf} />
-              <button type="submit" className="btn compact">{t.bar.signOut}</button>
-            </form>
-          ) : (
-            <a className="btn compact" href="/api/auth/login">{t.bar.signIn}</a>
-          )}
-        </div>
-      </div>
+      {signedIn ? null : (
+        <a className="brand" href="/">
+          <span className="brand-mark"><Icon name="shield" /></span>
+          {t.product}
+        </a>
+      )}
       {signedIn ? (
         <div className="topbar-meta">
           {me ? (
             <dl className="contents">
-              <div className="meta-item"><dt>{t.bar.user}</dt><dd className="mono" title={me.sub}>{me.sub.slice(0, 8)}</dd></div>
+              <div className="meta-item"><dt className="sr-only">{t.bar.user}</dt><Icon name="user" /><dd className="mono" title={me.sub}>{me.sub.slice(0, 8)}</dd></div>
               <div className="meta-item"><dt>{t.bar.roles}</dt><dd>{me.roles.join(", ") || t.bar.none}</dd></div>
               <div className="meta-item"><dt>{t.bar.clearance}</dt><dd><Badge level={me.clearance} /></dd></div>
               <div className="meta-item"><dt>{t.bar.unit}</dt><dd>{me.unit}</dd></div>
@@ -69,27 +62,49 @@ export function TopBar({ me, csrf, expiresAt, theme, path }: Omit<ChromeProps, "
           )}
           {expiresAt ? (
             <span className="meta-item">
+              <Icon name="clock" />
               <span className="text-muted">{t.bar.expires}</span>
               <time className="mono" dateTime={expiresAt.toISOString()} data-countdown={expiresAt.toISOString()} suppressHydrationWarning>{utc(expiresAt)}</time>
             </span>
           ) : null}
         </div>
       ) : null}
+      {signedIn ? null : (
+        <div className="topbar-controls">
+          <ThemeForm theme={theme} csrf={csrf} path={path} />
+          <a className="btn compact" data-kind="primary" href="/api/auth/login"><Icon name="lock" />{t.bar.signIn}</a>
+        </div>
+      )}
     </header>
   );
 }
 
-export function SideNav({ me, path }: { me?: Me | undefined; path: string }) {
+export function SideNav({ me, path, csrf, theme }: { me?: Me | undefined; path: string; csrf: string; theme: Theme }) {
   const items = navFor(me?.roles ?? []);
   const current = (href: string) => (href === "/" ? path === "/" : path === href || (href !== "/cases" && path.startsWith(`${href}/`)) || (href === "/cases" && /^\/cases\/(?!new)/.test(path)));
   return (
     <nav className="sidenav" aria-label={t.nav.label}>
-      <h2>{t.nav.section}</h2>
-      <ul>
-        {items.map((i) => (
-          <li key={i.href}><a href={i.href} {...(current(i.href) ? { "aria-current": "page" as const } : {})}>{i.label}</a></li>
-        ))}
-      </ul>
+      <div className="sidenav-in">
+      <a className="brand" href="/">
+        <span className="brand-mark"><Icon name="shield" /></span>
+        {t.product}
+      </a>
+      <div>
+        <h2>{t.nav.section}</h2>
+        <ul>
+          {items.map((i) => (
+            <li key={i.href}><a href={i.href} {...(current(i.href) ? { "aria-current": "page" as const } : {})}><Icon name={i.icon} />{i.label}</a></li>
+          ))}
+        </ul>
+      </div>
+      <div className="sidenav-foot">
+        <ThemeForm theme={theme} csrf={csrf} path={path} />
+        <form method="post" action="/api/auth/logout">
+          <input type="hidden" name="csrf" value={csrf} />
+          <button type="submit" className="btn"><Icon name="logout" />{t.bar.signOut}</button>
+        </form>
+      </div>
+      </div>
     </nav>
   );
 }
@@ -100,12 +115,14 @@ export function Chrome(p: ChromeProps) {
   return (
     <>
       <a className="skip-link" href="#main">{t.skip}</a>
-      <TopBar {...p} />
-      <div className="layout" data-nav={signedIn ? "yes" : "none"}>
-        {signedIn ? <SideNav me={p.me} path={p.path} /> : null}
-        <main id="main" className="content" tabIndex={-1}>{p.children}</main>
+      <div className="shell" data-nav={signedIn ? "yes" : "none"}>
+        {signedIn ? <SideNav me={p.me} path={p.path} csrf={p.csrf!} theme={p.theme} /> : null}
+        <div className="main">
+          <TopBar {...p} />
+          <main id="main" className="content" tabIndex={-1}>{p.children}</main>
+          <footer className="footer">{t.product}</footer>
+        </div>
       </div>
-      <footer className="footer">{t.product}</footer>
       {signedIn && p.expiresAt ? <script src="/ui.js" nonce={p.nonce} defer /> : null}
     </>
   );

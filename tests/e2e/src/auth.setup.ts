@@ -17,7 +17,7 @@ for (const user of USERS) {
       await page.waitForLoadState("domcontentloaded");
     }
     await page.waitForURL("https://vault.localhost/**");
-    await expect(page.locator("header.topbar")).toContainText("Sign out");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
     await page.context().storageState({ path: authFile(user) });
   });
 }

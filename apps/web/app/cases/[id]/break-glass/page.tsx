@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "../../../../src/server/pages";
 import { UUID_RE } from "../../../../src/server/actions";
 import { Alert, Field, Page } from "../../../../src/ui/components";
+import { Icon } from "../../../../src/ui/icons";
 import { t } from "../../../../src/ui/i18n";
 
 export const metadata = { title: t.bg.title };
@@ -16,7 +17,7 @@ export default async function BreakGlass({ params, searchParams }: { params: Pro
     <Page title={t.bg.title}>
       {problem ? <Alert tone="danger" live="alert">{problem}</Alert> : null}
       <form method="post" action={`/actions/case-files/${id}/break-glass`} className="glass max-w-3xl" aria-labelledby="bg-frame">
-        <h2 id="bg-frame">{t.bg.frame}</h2>
+        <h2 id="bg-frame"><Icon name="alert" />{t.bg.frame}</h2>
         <p className="mb-3">{t.bg.warn}</p>
         <input type="hidden" name="csrf" value={session.csrfToken} />
         <Field id="bg-just" label={t.bg.justification} hint={t.bg.justHint}>
