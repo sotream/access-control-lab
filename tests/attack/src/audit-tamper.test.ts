@@ -6,6 +6,8 @@ import { oidcTokens } from "./kc.js";
 import { bff, session } from "./sessions.js";
 import { COMPOSE, ROOT, env, psqlAs, secret } from "./stack.js";
 import { vault } from "./http.js";
+// the reader and the predicate live next to the exporter they check (a test helper of packages/audit, not part of its API)
+import { isRawFormula, parseCsv } from "../../../packages/audit/src/csv-parse.js";
 
 const appPw = () => /casefile_app:([^@]+)@/.exec(secret("database_url_api"))![1]!;
 const webPw = () => /casefile_web:([^@]+)@/.exec(secret("database_url_web"))![1]!;
@@ -81,7 +83,10 @@ describe("A-51 through the application there is no way to change or hide the tra
     const before = (await bff(a, "GET", "/audit-log?action=audit.export")).json as { rows: unknown[] };
     const csv = await vault("/actions/audit/export", { method: "POST", jar: a.jar, headers: { ...FORM, origin: "https://vault.localhost", "sec-fetch-site": "same-origin" }, body: form({ csrf: a.csrf, format: "csv" }) });
     expect(csv.status).toBe(200);
-    for (const line of csv.text.split("\n").slice(1)) for (const cell of line.split(",")) expect(cell, "no cell starts like a formula").not.toMatch(/^["']?[=+\-@\t\r]/);
+    // parsed as CSV (quoted cells can hold commas and line breaks); a cell is safe when the exporter neutralised it with a leading apostrophe or it never looked like a formula
+    const rows = parseCsv(csv.text).slice(1);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) for (const cell of row) expect(isRawFormula(cell), `cell ${JSON.stringify(cell)} is a raw formula`).toBe(false);
     const after = (await bff(a, "GET", "/audit-log?action=audit.export")).json as { rows: unknown[] };
     expect(after.rows.length).toBeGreaterThan(before.rows.length);
   });
