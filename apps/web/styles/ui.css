@@ -68,7 +68,7 @@
   --surface-2: #171d25;
   --surface-3: #1f2731;
   --field: #0c1015;
-  --line: #222b35;
+  --line: #2a3541;
   --line-strong: #6b7a8c;
   --text: #e7ebef;
   --muted: #9ba7b4;
@@ -95,7 +95,7 @@
   --bar-confidential: #7a4f0a;
   --bar-secret: #8f2230;
   --bar-text: #ffffff;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.28);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.22);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
 }
 @media (prefers-color-scheme: light) {
@@ -106,7 +106,7 @@
     --surface-2: #f4f6f9;
     --surface-3: #e8ecf1;
     --field: #ffffff;
-    --line: #dbe1e8;
+    --line: #cfd6df;
     --line-strong: #667385;
     --text: #121820;
     --muted: #475361;
@@ -133,7 +133,7 @@
     --bar-confidential: #7a4f0a;
     --bar-secret: #8f2230;
     --bar-text: #ffffff;
-    --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 6px 18px rgb(16 24 40 / 0.07);
+    --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 2px 5px rgb(16 24 40 / 0.06);
     --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.08);
   }
 }
@@ -144,7 +144,7 @@
   --surface-2: #f4f6f9;
   --surface-3: #e8ecf1;
   --field: #ffffff;
-  --line: #dbe1e8;
+  --line: #cfd6df;
   --line-strong: #667385;
   --text: #121820;
   --muted: #475361;
@@ -171,7 +171,7 @@
   --bar-confidential: #7a4f0a;
   --bar-secret: #8f2230;
   --bar-text: #ffffff;
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 6px 18px rgb(16 24 40 / 0.07);
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 2px 5px rgb(16 24 40 / 0.06);
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.08);
 }
 
@@ -188,9 +188,11 @@
 
 /* ---- base ---------------------------------------------------------------------------------------------------------------- */
 :root {
-  --r-sm: 4px;
-  --r: 6px;
-  --r-lg: 10px;
+  /* corner scale: chips and badges 2, controls 3, panels and cards 4; tables, banners and the classification strip are nearly square (2) */
+  --r-sm: 2px;
+  --r: 3px;
+  --r-lg: 4px;
+  --r-flat: 2px;
   --ease: 140ms ease;
 }
 html {
@@ -221,7 +223,6 @@ a:hover {
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--r-sm);
 }
 h1 {
   font-size: 1.5rem;
@@ -399,7 +400,7 @@ svg.icon {
   top: 0.45rem;
   bottom: 0.45rem;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0;
   background: var(--accent-bright);
 }
 .sidenav a[aria-current="page"] svg.icon {
@@ -528,7 +529,7 @@ svg.icon {
   gap: 0.25rem 1rem;
   margin: 0 0 1.1rem;
   padding: 0.5rem 1rem;
-  border-radius: var(--r-lg);
+  border-radius: var(--r-flat);
   color: var(--bar-text);
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -666,7 +667,7 @@ svg.icon {
   overflow: auto;
   max-height: calc(100vh - 13rem);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-flat);
   background: var(--surface);
   box-shadow: var(--shadow);
 }
