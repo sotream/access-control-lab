@@ -139,8 +139,11 @@ Required checks on `main` (the `protect-main` ruleset): `check`, `identity`, `se
 - [docs/asvs.md](docs/asvs.md) is a self-assessment by the authors, not a certification or an audit, and its requirement numbering was not diffed against the official list.
 - Known gaps are written down with an owner and an upgrade path in [docs/accepted-risks.md](docs/accepted-risks.md): for example no token revocation list (a stolen access token works for at most five minutes), no TLS between internal components, no external anchoring of audit checkpoints, no storage quota.
 - What is not verified (assistive technology, other browsers, more than one replica, a real certificate authority) is listed in [docs/ui.md](docs/ui.md), [docs/deployment.md](docs/deployment.md) and [docs/asvs.md](docs/asvs.md).
-- No license file is present yet: the code is public for review.
 - Security reports: see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE).
 
 ## Status
 
