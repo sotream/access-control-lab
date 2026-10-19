@@ -31,7 +31,7 @@ All design values are CSS variables in `apps/web/styles/ui.css`, mapped into the
 |---|---|
 | Surfaces | `--bg`, `--surface`, `--surface-2`, `--surface-3`, `--field` (inputs), `--line`, `--line-strong`, `--shadow`, `--shadow-sm` |
 | Text and links | `--text`, `--muted`, `--link` (underlined everywhere, also in tables), `--accent` (primary button), `--accent-bright` (active navigation, brand mark), `--accent-text`, `--focus` |
-| Shape and motion | radius 4 px (chips), 6 px (controls), 10 px (panels, tables, banner); 140 ms colour transitions, none under `prefers-reduced-motion` |
+| Shape and motion | radius 2 px (chips, badges), 3 px (controls, buttons, navigation items), 4 px (panels, cards, the empty and error views), 2 px for tables, the banner and the classification strip (`--r-sm`, `--r`, `--r-lg`, `--r-flat`); no pill shapes; focus outlines follow the element's own corners; 140 ms colour transitions, none under `prefers-reduced-motion` |
 | Tones | `--danger`, `--warn`, `--ok`, `--info` (each with `-bg`) |
 | Classification | `--cls-official`, `--cls-confidential`, `--cls-secret` (badge, each with `-bg`); `--bar-*` and `--bar-text` (banner) |
 | Type | Inter Variable (text), JetBrains Mono Variable (identifiers, timestamps, content), both self-hosted |
