@@ -405,8 +405,8 @@ describe("csv export neutralises every formula start, whatever the seed of a fuz
     for (const lead of spaces) {
       const raw = `${lead}${c}${b}`;
       const out = csvCell(raw);
-      const [[cell]] = parseCsv(out);
-      expect(isRawFormula(cell!), `${JSON.stringify(raw)} -> ${JSON.stringify(out)}`).toBe(false);
+      const cell = parseCsv(out)[0]![0]!;
+      expect(isRawFormula(cell), `${JSON.stringify(raw)} -> ${JSON.stringify(out)}`).toBe(false);
       // only the characters the exporter claims to handle can start a formula: a leading no-break space is not whitespace to Excel's formula parser, but is to \s; either way the cell is safe
       expect(cell === raw || cell === `'${raw}`, "the text itself is unchanged, at most prefixed").toBe(true);
     }
