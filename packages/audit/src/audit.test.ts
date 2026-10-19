@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { appendAudit, buildRow, genesisHead, rowFromDb, validateEntry, type Db } from "./chain.js";
 import { canonicalBytes, checkpointBytes, stableStringify } from "./canonical.js";
 import { csvCell, csvLine } from "./csv.js";
+import { isRawFormula, parseCsv } from "./csv-parse.js";
 import { fingerprint, makeCursor, openCursor } from "./cursor.js";
 import { DETAIL_KEYS, sanitizeText, validateDetails } from "./details.js";
 import { parseAuditKeys } from "./keys.js";
@@ -393,6 +394,41 @@ describe("CSV (T-12 for exports): formula injection is neutralised", () => {
     expect(csvCell(["audit", "=alert"])).toBe("audit;=alert"); // not at the start of the cell
     expect(csvCell(["=a", "b"])).toBe("'=a;b");
     expect(csvLine(["a", "=b", 3])).toBe("a,'=b,3");
+  });
+});
+
+describe("csv export neutralises every formula start, whatever the seed of a fuzzer or the content of a cell", () => {
+  const starts = ["=", "+", "-", "@", "\t", "\r"];
+  const bodies = ["x", "0", "SUM(A1)", "a,b", 'say "hi"', "line\nbreak", "cmd|' /C calc'!A0", ""];
+  const spaces = ["", " ", "  ", "\u00a0"];
+  it.each(starts.flatMap((c) => bodies.map((b) => [c, b] as const)))("a cell starting with %j then %j leaves as text", (c, b) => {
+    for (const lead of spaces) {
+      const raw = `${lead}${c}${b}`;
+      const out = csvCell(raw);
+      const cell = parseCsv(out)[0]![0]!;
+      expect(isRawFormula(cell), `${JSON.stringify(raw)} -> ${JSON.stringify(out)}`).toBe(false);
+      // only the characters the exporter claims to handle can start a formula: a leading no-break space is not whitespace to Excel's formula parser, but is to \s; either way the cell is safe
+      expect(cell === raw || cell === `'${raw}`, "the text itself is unchanged, at most prefixed").toBe(true);
+    }
+  });
+  it("a whole line round-trips through a real CSV reader, with quoted commas and line breaks inside formula-like cells", () => {
+    const cells = ["=1+1", "-0", "+cmd", "@SUM(A1)", "\tTAB", "\rCR", "plain, comma", 'q"uote', "multi\nline", "  =lead"];
+    const rows = parseCsv(`${csvLine(cells)}\n${csvLine(cells)}\n`);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toHaveLength(cells.length);
+      row.forEach((cell, i) => {
+        expect(isRawFormula(cell), JSON.stringify(cell)).toBe(false);
+        expect(cell === cells[i] || cell === `'${cells[i]}`).toBe(true);
+      });
+    }
+  });
+  it("the checker itself flags a raw formula and accepts the neutralised form (the case the nightly run tripped on)", () => {
+    for (const raw of ["=1", "+1", "-0", "@x", "\tx", "\rx", "  =x"]) expect(isRawFormula(raw), raw).toBe(true);
+    for (const safe of ["'-0", "'=1", "'  =x", "plain", "x-1", "1-1", "a=b", ""]) expect(isRawFormula(safe), safe).toBe(false);
+  });
+  it("the reader handles quoted commas, doubled quotes, line breaks and CRLF", () => {
+    expect(parseCsv('a,"b,c","d""e"\r\n"f\ng",h\n')).toEqual([["a", "b,c", 'd"e'], ["f\ng", "h"]]);
   });
 });
 
