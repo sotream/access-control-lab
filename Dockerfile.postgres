@@ -1,0 +1,6 @@
+# syntax=docker/dockerfile:1
+# The official postgres image plus the one Alpine package it still carries in a vulnerable version: brotli-libs 1.2.0-r1
+# (CVE-2026-111497, HIGH, fixed in Alpine as 1.2.1-r0; only libcurl needs it). Only that package is upgraded, nothing else changes.
+# Delete this file and use the official image again once upstream ships brotli-libs >= 1.2.1 (docs/supply-chain.md).
+FROM postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+RUN apk add --no-cache --upgrade brotli-libs

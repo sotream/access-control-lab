@@ -1,7 +1,5 @@
 # Trivy exceptions (docs/supply-chain.md, docs/deployment.md). Policy: HIGH/CRITICAL findings with a fix fail CI. Anything accepted instead of fixed is listed
 # here with a reason ("statement") and an expiry ("expired_at", at most 90 days out); scripts/check-trivyignore.mjs (part of `pnpm lint`) rejects an entry
 # without both, one that is expired, and one that expires too far ahead.
-vulnerabilities:
-  - id: CVE-2026-111497
-    statement: "brotli-libs 1.2.0-r1 in the official postgres:18.6-alpine image, needed only by libcurl (a runtime dependency of the image, not used by this stack: no OAuth, no outbound fetches). Fixed in Alpine as 1.2.1-r0, not yet in the upstream image. Drop this entry when upstream rebuilds."
-    expired_at: 2026-11-07
+# Empty on purpose today: the images this repository builds (api, web, keycloak, clamd, caddy, postgres) had no fixable HIGH/CRITICAL finding on 2026-10-24.
+vulnerabilities: []
