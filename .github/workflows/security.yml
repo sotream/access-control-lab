@@ -61,7 +61,7 @@ jobs:
             --lockfile=pnpm-lock.yaml
 
   images:
-    # (1) the images this repository builds (api, web, keycloak, clamd, caddy) and (2) the third-party images the compose files pin.
+    # (1) the images this repository builds (api, web, keycloak, clamd, caddy, postgres) and (2) the third-party image the compose files pin (Keycloak).
     # HIGH/CRITICAL with an available fix fail the job; every exception is in .trivyignore.yaml with a reason and an expiry. One CycloneDX SBOM per image is kept.
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -72,7 +72,6 @@ jobs:
       - name: Read image refs from docker-compose.yml
         id: refs
         run: |
-          echo "postgres=$(docker compose config --images | grep '^postgres')" >> "$GITHUB_OUTPUT"
           echo "keycloak=$(docker compose config --images | grep keycloak)" >> "$GITHUB_OUTPUT"
         env:
           POSTGRES_USER: x
@@ -96,6 +95,7 @@ jobs:
           docker build -f Dockerfile.web -t casefile-web:ci .
           docker build -f Dockerfile.keycloak -t casefile-keycloak:ci .
           docker build -f Dockerfile.caddy -t casefile-caddy:ci .
+          docker build -f Dockerfile.postgres -t casefile-postgres:ci .
           docker build -f Dockerfile.clamd --build-arg "SIGNATURES_DATE=$(date +%F)" -t casefile-clamd:ci .
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -141,18 +141,18 @@ jobs:
           trivyignores: .trivyignore.yaml
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ steps.refs.outputs.postgres }}
+          image-ref: casefile-postgres:ci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
           trivyignores: .trivyignore.yaml
-          # upstream postgres images ship a gosu built with an old Go stdlib (verified 2026-10-17 on 17.11 and 18.4);
+          # upstream postgres images ship a gosu built with an old Go stdlib (verified 2026-10-17 on 17.11 and 18.4, still there on 18.6);
           # gosu only runs once at container start to drop root. See docs/supply-chain.md.
           skip-files: usr/local/bin/gosu
       - name: SBOM per image (CycloneDX)
         run: |
           mkdir -p sboms
-          for i in api web keycloak caddy clamd; do
+          for i in api web keycloak caddy clamd postgres; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/sboms:/out" aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 image --format cyclonedx --output "/out/$i.cdx.json" "casefile-$i:ci"
           done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

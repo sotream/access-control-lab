@@ -1,7 +1,10 @@
 # DEV ONLY stack. All ports bind to 127.0.0.1. Credentials come from .env (see .env.example).
 services:
   postgres:
-    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18.x: the image keeps data under /var/lib/postgresql/18/docker, so the volume is mounted one level up; an old 17 volume is not reusable (docker compose down -v for dev data)
+    # postgres 18.6 plus a patched brotli-libs (Dockerfile.postgres). The 18 image keeps data under /var/lib/postgresql/18/docker, so the volume is mounted
+    # one level up; an old 17 volume is not reusable (docker compose down -v for dev data).
+    build: { context: ., dockerfile: Dockerfile.postgres }
+    image: casefile-postgres:dev
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set in .env}
