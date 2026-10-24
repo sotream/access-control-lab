@@ -149,7 +149,7 @@ services:
 
   postgres:
     <<: *hardened
-    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     user: "70:70" # the postgres user of the alpine image: no root step at all (the volume is created owned by it)
     env_file: ./secrets-dev/prod-like/compose.env # the stock init scripts take the role passwords from the environment; they never leave this container
     volumes:

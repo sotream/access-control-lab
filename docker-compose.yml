@@ -1,7 +1,7 @@
 # DEV ONLY stack. All ports bind to 127.0.0.1. Credentials come from .env (see .env.example).
 services:
   postgres:
-    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 # newest 17.x tag on Docker Hub, checked 2026-10-17
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 # newest 17.x tag on Docker Hub, checked 2026-10-17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set in .env}
