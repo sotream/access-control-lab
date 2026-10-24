@@ -149,7 +149,8 @@ services:
 
   postgres:
     <<: *hardened
-    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5 # 18.x: the image keeps data under /var/lib/postgresql/18/docker, so the volume is mounted one level up; an old 17 volume is not reusable (docker compose down -v for dev data)
+    build: { context: ., dockerfile: Dockerfile.postgres } # postgres 18.6 plus a patched brotli-libs; data lives under /var/lib/postgresql/18/docker, hence the volume one level up
+    image: casefile-postgres:prod-like
     user: "70:70" # the postgres user of the alpine image: no root step at all (the volume is created owned by it)
     env_file: ./secrets-dev/prod-like/compose.env # the stock init scripts take the role passwords from the environment; they never leave this container
     volumes:

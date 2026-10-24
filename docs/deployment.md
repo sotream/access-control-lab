@@ -60,14 +60,14 @@ Needs docker and openssl; first run builds the images (a few minutes), a later r
 | Workflow / job | What | Required check today |
 |----------------|------|----------------------|
 | `ci` / `check`, `identity`, `secret-scan` | lint, typecheck, unit tests, build; the identity tests against a real Keycloak; gitleaks | yes |
-| `ci` / `prod-like` | `node scripts/prod-like-test.mjs`: builds the five images (api, web, keycloak, caddy, clamd), starts them with the pulled Postgres image, attacks the stack (about 4 to 15 minutes) | yes |
+| `ci` / `prod-like` | `node scripts/prod-like-test.mjs`: builds the six images (api, web, keycloak, caddy, clamd, postgres), starts them, attacks the stack (about 4 to 15 minutes) | yes |
 | `ci` / `attack-tests` | the black-box attack suite and the ZAP baseline against the prod-like stack (`docs/attack-catalogue.md`) | yes |
 | `ci` / `e2e-browser` | Playwright with Chromium against the prod-like stack (`docs/ui.md`); about 5 minutes on a cold runner | yes |
 | `attack-nightly` | the attack suite with a random fuzz seed and the slow modes, every night | no (scheduled) |
 | `attack-mutation` | hand-made mutants of the defences, run manually, to show the suite bites (`docs/attack-catalogue.md`) | no (manual) |
 | `security` / `codeql` | CodeQL security-extended; results **uploaded to code scanning** and kept as an artifact; any finding fails the job | yes |
 | `security` / `osv`, `workflows` | OSV-Scanner on the lockfile; actionlint and zizmor | yes |
-| `security` / `images` | builds api, web, keycloak, caddy, clamd; Trivy (HIGH/CRITICAL, fix available, `.trivyignore.yaml`) on those five and on the compose-pinned Keycloak and Postgres images; one CycloneDX SBOM per built image as the artifact `sbom-images` | yes |
+| `security` / `images` | builds api, web, keycloak, caddy, clamd, postgres; Trivy (HIGH/CRITICAL, fix available, `.trivyignore.yaml`) on those six and on the compose-pinned Keycloak image; one CycloneDX SBOM per built image as the artifact `sbom-images` | yes |
 | `dependency-review` | `actions/dependency-review-action` on pull requests, fails on HIGH or worse | no (runs on every pull request) |
 | `scorecard` | OpenSSF Scorecard on `main` and weekly, published and uploaded to code scanning; has run successfully (v2.4.4 was chosen because v2.5.0 was under a week old, release-age policy) | no (not meaningful as a pull-request gate) |
 
