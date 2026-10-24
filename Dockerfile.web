@@ -22,7 +22,7 @@ RUN pnpm --filter '@acl/web...' build \
  && mkdir -p /out/.next/node_modules \
  && for p in apps/web/.next/node_modules/*; do l="$(basename "$p")"; ln -sfn "../../node_modules/${l%-*}" "/out/.next/node_modules/$l"; done
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:59c479c9b8c123e66047315c968aa2d35e31ae5149c856e4110a79c8b3563f0b
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8
 # production profile by default: an operator cannot forget it, dev values then stop the start
 ENV NODE_ENV=production ACL_ENV=production NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
