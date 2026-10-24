@@ -202,3 +202,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           REF: refs/pull/${{ github.event.pull_request.number }}/merge
+
+  cache-cleanup-main:
+    # Runs on main (and manual runs) only when every job above passed. Deletes (1) the caches of pull requests that are no longer open,
+    # which includes Dependabot's (the per-pull-request job above skips those: its token is read-only) and PRs merged before that job
+    # existed, and (2) every cache of main that is not the newest of its kind. A "kind" is the key without its trailing hash or date, so
+    # node-cache-<hash> and cache-trivy-<date> each keep their newest one, which stays the restore base for pull requests.
+    if: github.event_name != 'pull_request'
+    needs: [check, identity, prod-like, attack-tests, e2e-browser, secret-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Delete stale caches
+        run: |
+          open=$(gh pr list --state open --limit 100 --json number --jq '[.[].number]')
+          gh cache list --limit 100 --json id,key,ref,createdAt | jq -r --argjson open "$open" '
+            def kind: .key | sub("-([0-9a-f]{16,}|[0-9]{4}-[0-9]{2}-[0-9]{2})$"; "");
+            ( [ .[] | select(.ref | test("^refs/pull/[0-9]+/merge$"))
+                    | select((.ref | capture("^refs/pull/(?<n>[0-9]+)/merge$").n | tonumber) as $n | ($open | index($n)) | not) | .id ]
+            + ( [ .[] | select(.ref == "refs/heads/main") ] | group_by(kind) | map(sort_by(.createdAt) | reverse | .[1:][]) | map(.id) ) )
+            | .[]' | while read -r id; do
+              gh cache delete "$id"
+            done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
