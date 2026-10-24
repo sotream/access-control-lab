@@ -25,6 +25,10 @@ updates:
     directory: /
     schedule: { interval: weekly }
     cooldown: { default-days: 7 } # do not take a release younger than a week
+    ignore:
+      # the project runs on Node 24 (.nvmrc, engines); an odd major such as 25 is never an LTS. A move to the next LTS is a deliberate change.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
