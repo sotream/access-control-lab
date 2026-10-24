@@ -149,11 +149,11 @@ services:
 
   postgres:
     <<: *hardened
-    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 # 18.x: the image keeps data under /var/lib/postgresql/18/docker, so the volume is mounted one level up; an old 17 volume is not reusable (docker compose down -v for dev data)
     user: "70:70" # the postgres user of the alpine image: no root step at all (the volume is created owned by it)
     env_file: ./secrets-dev/prod-like/compose.env # the stock init scripts take the role passwords from the environment; they never leave this container
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
       - ./infra/postgres/init-keycloak-db.sh:/docker-entrypoint-initdb.d/10-keycloak-db.sh:ro
       - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/20-app-roles.sh:ro
     tmpfs: ["/tmp:uid=70,gid=70", "/run/postgresql:uid=70,gid=70"]
