@@ -24,9 +24,10 @@ What exists, where it is enforced, and what is **unverified**. Images are built 
 
 ## Known exceptions
 
-- **postgres image, gosu.** Official `postgres` images (17.11 alpine and debian, 18.4 alpine, checked 2026-10-17) bundle
+- **postgres image, gosu.** Official `postgres` images (17.11 alpine and debian, 18.4 alpine, checked 2026-10-17; 18.6 alpine rechecked 2026-10-24) bundle
   `usr/local/bin/gosu` built with an old Go stdlib: 1 CRITICAL and 24 HIGH fixable findings in Trivy. gosu runs once at
   container start to drop root and is not network facing, so the Trivy step skips that single file. Everything else in
   the image is still gated. Revisit when upstream rebuilds gosu.
+- **postgres 18.6 image, brotli-libs (CVE-2026-111497, HIGH, fix in Alpine 1.2.1-r0).** The official `postgres:18.6-alpine` image still carries brotli-libs 1.2.0-r1, which only libcurl needs. This stack does not use libcurl from the database container. Listed in `.trivyignore.yaml` with an expiry of 2026-11-07; remove the entry when upstream rebuilds the image. The older `postgres:18.4-alpine` image was worse (11 fixable HIGH findings, Alpine 3.24.1).
 - **Images built here are patched by building them.** The stock `caddy` and `clamav` images had 3 and 26 fixable HIGH/CRITICAL findings on 2026-10-18; `Dockerfile.caddy` and `Dockerfile.clamd` replace them (`docs/deployment.md`). The cost is that their rebuild schedule is ours.
 - **The repository is public** (it was private while stages 1 to 7 were built), so dependency-review, code scanning upload and Scorecard are available and used.
