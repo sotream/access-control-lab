@@ -181,3 +181,24 @@ jobs:
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cache-cleanup:
+    # Runs only when every job above passed. Deletes the caches of this pull request's own ref: they are readable only by this
+    # pull request, so nothing else needs them, and they count against the 10 GB repository limit. Caches of main stay (they are
+    # the restore base for every pull request). Skipped for Dependabot: its token is read-only, and its caches expire on their own.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    needs: [check, identity, prod-like, attack-tests, e2e-browser, secret-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Delete this pull request's caches
+        run: |
+          gh cache list --ref "$REF" --limit 100 --json id --jq '.[].id' | while read -r id; do
+            gh cache delete "$id"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
