@@ -4,9 +4,9 @@ Casefile Vault is a learning and demonstration project; it holds no real data. R
 
 ## Reporting
 
-Report privately to the repository owner: GitHub private vulnerability reporting if it is enabled for this
-repository (Security tab), otherwise a direct message. Do not open a public issue with details.
-Please do not post exploit details in public issues.
+Report privately through GitHub private vulnerability reporting:
+<https://github.com/sotream/access-control-lab/security/advisories/new>
+Do not open a public issue with details, and please do not post exploit details in public issues.
 
 ## Scope
 
