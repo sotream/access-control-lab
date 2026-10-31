@@ -9,7 +9,7 @@ COPY infra/caddy/main.go.txt main.go
 RUN go get github.com/caddyserver/caddy/v2@${CADDY_VERSION} golang.org/x/net@v0.60.0 && go mod tidy \
  && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /caddy .
 
-FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 COPY --from=build /caddy /usr/bin/caddy
 USER 65532:65532
 ENTRYPOINT ["/usr/bin/caddy"]

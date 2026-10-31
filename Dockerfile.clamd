@@ -2,7 +2,7 @@
 # ClamAV daemon on a current Alpine, so the operating system packages are the patched ones (the stock clamav/clamav image lags behind: 26 fixable
 # HIGH/CRITICAL findings when this stage was written, see docs/deployment.md). Signatures are downloaded and verified by freshclam AT BUILD TIME and baked
 # in: the running container has no network. Rebuild (change SIGNATURES_DATE) to refresh them; CI does it on every run, a deployment needs its own schedule.
-FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 RUN apk add --no-cache clamav clamav-daemon clamav-clamdscan freshclam \
  && install -d -o clamav -g clamav -m 0755 /var/lib/clamav /run/clamav
 COPY infra/clamd/clamd.conf /etc/clamav/clamd.conf
