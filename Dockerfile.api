@@ -22,7 +22,7 @@ RUN pnpm --filter '@acl/api...' build \
  && pnpm --filter @acl/api deploy --prod --legacy /out \
  && mkdir -p /out/attachments
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:b8cec4b2f2126ff7bd034ec9ac207ffb3272667dfdc48376e3b035d3270549ba
 # production profile by default: an operator cannot forget it, dev values then stop the start
 ENV NODE_ENV=production ACL_ENV=production
 WORKDIR /app
