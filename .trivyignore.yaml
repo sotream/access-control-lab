@@ -5,4 +5,4 @@
 vulnerabilities:
   - id: CVE-2026-102554
     statement: "guava 33.6.0-jre inside the Keycloak 26.8.1 image (DoS); fixed in guava 33.7.2 but no Keycloak image ships it yet. Drop this entry when a Keycloak release bundles guava >= 33.7.2."
-    expired_at: "2026-12-01"
+    expired_at: 2026-12-01
