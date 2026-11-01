@@ -1,5 +1,8 @@
 # Trivy exceptions (docs/supply-chain.md, docs/deployment.md). Policy: HIGH/CRITICAL findings with a fix fail CI. Anything accepted instead of fixed is listed
 # here with a reason ("statement") and an expiry ("expired_at", at most 90 days out); scripts/check-trivyignore.mjs (part of `pnpm lint`) rejects an entry
 # without both, one that is expired, and one that expires too far ahead.
-# Empty on purpose today: the images this repository builds (api, web, keycloak, clamd, caddy, postgres) had no fixable HIGH/CRITICAL finding on 2026-10-24.
-vulnerabilities: []
+# Keep it short: every entry expires within 90 days.
+vulnerabilities:
+  - id: CVE-2026-102554
+    statement: "guava 33.6.0-jre inside the Keycloak 26.8.1 image (DoS); fixed in guava 33.7.2 but no Keycloak image ships it yet. Drop this entry when a Keycloak release bundles guava >= 33.7.2."
+    expired_at: "2026-12-01"
