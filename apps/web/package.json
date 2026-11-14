@@ -15,19 +15,19 @@
   "dependencies": {
     "@acl/audit": "workspace:*",
     "@acl/netguard": "workspace:*",
-    "next": "^16.4.3",
-    "openid-client": "6.8.8",
+    "next": "^16.4.5",
+    "openid-client": "6.8.9",
     "pg": "8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.5",
     "@types/pg": "8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "postcss": "^8.5.32",
-    "tailwindcss": "^4.3.3",
-    "vitest": "^5.0.5"
+    "tailwindcss": "^4.3.5",
+    "vitest": "^5.1.0"
   }
 }
