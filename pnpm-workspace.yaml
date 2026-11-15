@@ -10,3 +10,5 @@ overrides:
   multer: 2.5.0
   # GHSA-g3hv-75wg-m249: eslint and @eslint/config-array pin minimatch 10.x, fix is 11.0.1. Remove once they allow >= 11.0.1.
   minimatch: ^11.0.1
+  # jsdom 31 calls tokenizer.flushCharacters(), present only in parse5 >= 8.1.0, but parse5-parser-stream 8.1.0 resolves parse5 8.0.1 (TypeError in scripts/check-mermaid.mjs). Remove once parse5-parser-stream depends on parse5 >= 8.1.0.
+  parse5: 8.1.0
