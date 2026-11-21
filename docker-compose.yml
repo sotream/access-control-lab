@@ -30,7 +30,7 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.2@sha256:c68e286cacd87b942ac1939a0a1481461109d6acd3a57dc496969a319a76bbf0 # latest GitHub release 2026-10-17; 26.4.0 predates many CVE fixes
+    image: quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3 # latest GitHub release 2026-10-17; 26.4.0 predates many CVE fixes
     restart: unless-stopped
     # start-dev: dev mode only (HTTP, relaxed hostname). Stage 2+ must not assume this is production-like.
     command: ["start-dev", "--import-realm", "--features-disabled=device-flow,ciba,impersonation"]
